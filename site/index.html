@@ -4,20 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>L’amylase en trois dimensions</title>
-<meta name="description" content="Observer la structure 3D de l’amylase pancréatique porcine (PDB 3L2L) et la placer en réalité augmentée.">
+<meta name="description" content="Parcours en 3D et en réalité augmentée : structure de l’amylase, site actif, complexe enzyme-substrat, hydrolyse de l’amidon (PDB 3L2L).">
 <meta name="theme-color" content="#f7f6fb">
 <style>
-/* Mise en page : une grande zone d’observation, une barre de commandes sous le modèle. */
+/* Mise en page : étapes en haut, grande zone 3D, texte de l'étape à côté (dessous sur téléphone). */
 :root {
-  --bg: #f7f6fb;
-  --panel: #ffffff;
-  --ink: #1f1b2b;
-  --muted: #5d5770;
-  --line: #dcd7e8;
-  --violet: #6a3db8;
-  --violet-dark: #5a339e;
-  --sugar: #f4a600;
-  --site: #1bc689;
+  --bg: #f7f6fb; --panel: #ffffff; --ink: #1f1b2b; --muted: #5d5770; --line: #dcd7e8;
+  --violet: #6a3db8; --violet-dark: #5a339e; --violet-soft: #efe9fa;
+  --sugar: #f4a600; --cel: #2f6db5; --site: #1bc689; --cut: #e31c2e;
   --font: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 * { box-sizing: border-box; }
@@ -25,102 +19,106 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: var(--font); font-size: 17px; line-height: 1.4;
-  display: flex; flex-direction: column;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  font-family: var(--font); font-size: 17px; line-height: 1.45;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-header {
-  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-}
-h1 { font-size: 1.35rem; margin: 0; font-weight: 700; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 max(12px, env(safe-area-inset-right, 0px)) 16px max(12px, env(safe-area-inset-left, 0px)); }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 10px 4px 6px; }
+h1 { font-size: 1.35rem; margin: 0; }
 .source-tag { font-size: .85rem; color: var(--muted); }
 
-main {
-  flex: 1; min-height: 0; display: flex; flex-direction: column;
-  padding: 0 max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px));
-  gap: 10px;
+.steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 10px; padding: 0; list-style: none; }
+.steps button {
+  width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  font: 600 .92rem var(--font); color: var(--ink); cursor: pointer; padding: 4px 6px; line-height: 1.15;
 }
+.steps button span { display: block; font-size: .78rem; color: var(--muted); font-weight: 400; }
+.steps button[aria-current="step"] { background: var(--violet); border-color: var(--violet); color: #fff; }
+.steps button[aria-current="step"] span { color: #e6dcf7; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .stage {
-  position: relative; flex: 1; min-height: 300px;
+  position: relative; height: min(72vh, 640px); min-height: 340px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
 }
-model-viewer {
-  position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #fbfaff;
-  --poster-color: transparent; --progress-bar-color: var(--violet);
+model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; background: #fbfaff; --poster-color: transparent; --progress-bar-color: var(--violet); }
+
+/* Légendes attachées au modèle (suivent la rotation) */
+.hotspot { display: block; border: 0; padding: 0; background: none; pointer-events: none; --min-hotspot-opacity: 1; }
+.hotspot .lab {
+  position: absolute; left: 9px; top: 0; transform: translateY(-50%); white-space: nowrap;
+  background: rgba(255,255,255,.95); border: 1.5px solid var(--c, var(--violet)); color: var(--ink);
+  border-radius: 8px; padding: 2px 8px; font: 600 .85rem var(--font); box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+.hotspot.left .lab { left: auto; right: 9px; }
+.hotspot::before {
+  content: ""; position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--c, var(--violet)); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15);
 }
 
-/* Bouton de réalité augmentée (slot de model-viewer, affiché seulement si la RA est possible) */
-#ar-button { z-index: 2;
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+.legend { position: absolute; top: 8px; left: 8px; right: 60px; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .85rem; pointer-events: none; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9); padding: 2px 8px; border-radius: 8px; }
+.legend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.legend i.grad { border-radius: 3px; width: 26px; background: linear-gradient(90deg, #2bb3d9, #4b1f8f); }
+.scale-note { position: absolute; left: 10px; bottom: 74px; font-size: .78rem; color: var(--muted); pointer-events: none; }
+
+.zoom { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; }
+.zoom button {
+  width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font: 700 1.3rem var(--font); cursor: pointer;
+}
+#ar-button {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2;
   background: var(--violet); color: #fff; border: 0; border-radius: 999px;
-  font: 700 1.05rem var(--font); padding: 13px 22px; white-space: nowrap;
+  font: 700 1.02rem var(--font); padding: 12px 20px; white-space: nowrap;
   box-shadow: 0 4px 14px rgba(90,51,158,.35); cursor: pointer;
 }
 #ar-button:active { background: var(--violet-dark); }
-
-.legend {
-  position: absolute; top: 10px; left: 10px; right: 64px;
-  display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .9rem; pointer-events: none;
-}
-.legend span { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.88); padding: 3px 8px; border-radius: 8px; }
-.legend i { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
-.scale-note { position: absolute; left: 12px; bottom: 74px; font-size: .8rem; color: var(--muted); pointer-events: none; }
-
-.zoom { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 6px; }
-.zoom button {
-  width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--panel); color: var(--ink); font: 700 1.4rem var(--font); cursor: pointer;
-}
-
-.site-caption {
-  position: absolute; left: 10px; right: 10px; bottom: 72px; margin: 0 auto; max-width: 460px;
-  background: #ffffff; border: 2px solid var(--site); border-radius: 10px; padding: 8px 12px; font-size: .95rem;
-}
-
-.loading {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  color: var(--muted); background: #fbfaff; font-size: 1rem;
-}
+.loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted); background: rgba(251,250,255,.92); }
 .spinner { width: 34px; height: 34px; border: 4px solid var(--line); border-top-color: var(--violet); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 .error { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #fff; }
 
-.controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.controls button {
-  min-height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
-  font: 600 .98rem var(--font); padding: 6px 8px; cursor: pointer;
-}
-.controls button[aria-pressed="true"] { background: #efe9fa; border-color: var(--violet); color: var(--violet-dark); }
-.controls button:focus-visible, .zoom button:focus-visible, #ar-button:focus-visible, summary:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
-
-.ar-info { font-size: .9rem; color: var(--muted); margin: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.panel h2 { font-size: 1.2rem; margin: 0 0 8px; color: var(--violet-dark); text-wrap: balance; }
+.panel h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
+.panel p { margin: 0 0 8px; }
+.panel ol { margin: 4px 0 4px; padding-left: 1.3em; }
+.panel li { margin-bottom: 6px; }
+.retenir { border: 1.5px solid var(--violet); border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
+.retenir strong { color: var(--violet-dark); }
+.question { background: var(--violet-soft); border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
+.recherche { font-size: .88rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; margin-top: 8px; }
+.modele { font-size: .85rem; color: var(--muted); font-style: italic; margin-top: 8px; }
+.ar-info { font-size: .88rem; color: var(--muted); margin: 8px 0 0; }
 .ar-info.warn { color: #8a4b00; }
 
-details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
-summary { cursor: pointer; font-weight: 700; }
-details p, details li { font-size: .95rem; }
-details ul { padding-left: 1.2em; margin: .4em 0; }
-.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nav { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.nav button {
+  min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font: 600 .95rem var(--font); padding: 6px 14px; cursor: pointer;
+}
+.nav button.primary { background: var(--violet); color: #fff; border-color: var(--violet); }
+.nav button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
+
+details.about { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+details.about summary { cursor: pointer; font-weight: 700; }
+details.about p { font-size: .9rem; }
 .small { font-size: .85rem; color: var(--muted); }
 
-@media (max-width: 640px) {
-  .controls { grid-template-columns: 1fr 1fr; }
-  .panels { grid-template-columns: 1fr; }
-  .stage { min-height: 58vh; }
-  main { overflow-y: auto; }
-  body { height: auto; min-height: 100%; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .stage { height: 58vh; }
+  .steps button { font-size: .8rem; min-height: 44px; padding: 3px; }
+  .steps button span { display: none; }
+  .hotspot .lab { font-size: .74rem; padding: 1px 6px; }
 }
 @media (orientation: landscape) and (max-height: 520px) {
-  header { padding-block: 4px; }
-  h1 { font-size: 1.1rem; }
-  main { flex-direction: row; flex-wrap: wrap; overflow-y: auto; }
-  .stage { flex: 1 1 60%; min-height: 78vh; }
-  .side { flex: 1 1 34%; min-width: 230px; display: flex; flex-direction: column; gap: 8px; }
-  .controls { grid-template-columns: 1fr 1fr; }
-  .panels { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .stage { height: 82vh; }
+  .steps button span { display: none; }
 }
 </style>
 <script>
@@ -134,90 +132,71 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
 <script src="lib/model-viewer-umd.min.js" onerror="mvFallback()"></script>
 </head>
 <body>
+<div class="wrap">
 <header>
   <h1>L’amylase en trois dimensions</h1>
-  <span class="source-tag">Amylase pancréatique de porc · PDB 3L2L</span>
+  <span class="source-tag">Amylase pancréatique de porc · structure expérimentale PDB 3L2L</span>
 </header>
 
-<main>
+<ol class="steps" aria-label="Étapes du parcours">
+  <li><button type="button" data-step="0">1. Structure<span>une protéine en 3D</span></button></li>
+  <li><button type="button" data-step="1">2. Site actif<span>où a lieu la réaction</span></button></li>
+  <li><button type="button" data-step="2">3. Fixation<span>complexe E-S</span></button></li>
+  <li><button type="button" data-step="3">4. Catalyse<span>hydrolyse</span></button></li>
+  <li><button type="button" data-step="4">5. Cellulose ?<span>hypothèses</span></button></li>
+</ol>
+
+<div class="layout">
   <div class="stage">
     <model-viewer id="viewer"
-      alt="Modèle 3D de l’amylase (surface violette) et des fragments glucidiques associés (sphères orange)"
+      alt="Modèle 3D de l’amylase"
       camera-controls touch-action="pan-y"
-      camera-orbit="0deg 75deg auto" min-camera-orbit="auto auto 15%" max-camera-orbit="auto auto 250%"
-      interpolation-decay="120"
-      shadow-intensity="0.6" exposure="0.95" environment-image="neutral"
+      camera-orbit="0deg 75deg auto" min-camera-orbit="auto auto 10%" max-camera-orbit="auto auto 300%"
+      interpolation-decay="120" shadow-intensity="0.5" exposure="0.95" environment-image="neutral"
       loading="eager" reveal="auto"
       ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto">
       <button id="ar-button" slot="ar-button" type="button">Observer dans mon environnement</button>
       <div slot="progress-bar"></div>
     </model-viewer>
 
-    <div class="legend" aria-label="Légende">
-      <span><i style="background:var(--violet)"></i>Amylase</span>
-      <span id="lg-sugar"><i style="background:var(--sugar)"></i>Fragments glucidiques associés à l’amylase</span>
-      <span id="lg-site" hidden><i style="background:var(--site)"></i>Site actif</span>
-    </div>
-
+    <div class="legend" id="legend" aria-label="Légende"></div>
     <div class="zoom">
       <button id="zoom-in" type="button" aria-label="Zoomer">+</button>
       <button id="zoom-out" type="button" aria-label="Dézoomer">−</button>
+      <button id="btn-reset" type="button" aria-label="Réinitialiser la vue" title="Réinitialiser la vue">⟲</button>
     </div>
-
     <p class="scale-note">Modèle moléculaire agrandi (environ 60 millions de fois)</p>
-
-    <p class="site-caption" id="site-caption" hidden>
-      <strong>Site actif</strong> (en vert) : région de l’enzyme où le substrat se fixe et où se déroule sa transformation.
-    </p>
-
-    <div class="loading" id="loading">
-      <div class="spinner" aria-hidden="true"></div>
-      <div id="loading-text">Chargement du modèle moléculaire…</div>
-    </div>
+    <div class="loading" id="loading"><div class="spinner" aria-hidden="true"></div><div id="loading-text">Chargement du modèle moléculaire…</div></div>
     <div class="error" id="error" hidden></div>
   </div>
 
-  <div class="side">
-    <div class="controls">
-      <button id="btn-reset" type="button">Réinitialiser la vue</button>
-      <button id="btn-sugar" type="button" aria-pressed="true">Fragments glucidiques</button>
-      <button id="btn-site" type="button" aria-pressed="false">Repérer le site actif</button>
-      <button id="btn-info" type="button" aria-pressed="false" aria-controls="info">Informations</button>
+  <div>
+    <section class="panel" id="panel" aria-live="polite"></section>
+    <div class="nav">
+      <button type="button" id="prev">← Précédent</button>
+      <button type="button" id="replay" hidden>↻ Rejouer</button>
+      <button type="button" id="next" class="primary">Suivant →</button>
     </div>
+    <p class="ar-info" id="ar-info"></p>
 
-    <p class="ar-info" id="ar-info">Tournez le modèle avec un doigt, zoomez en pinçant l’écran.</p>
-
-    <div class="panels">
-      <details id="info">
-        <summary>Informations</summary>
-        <ul>
-          <li>Une enzyme est une protéine possédant une structure tridimensionnelle.</li>
-          <li>Le site actif est la région de l’enzyme où le substrat se fixe et où se déroule sa transformation.</li>
-          <li>L’association temporaire de l’enzyme et du substrat forme un complexe enzyme-substrat.</li>
-        </ul>
-        <p class="small">Ce modèle est construit à partir d’une structure expérimentale : c’est une représentation statique, figée au moment de l’expérience. Il ne montre pas directement la transformation chimique.</p>
-      </details>
-
-      <details id="about">
-        <summary>À propos du modèle</summary>
-        <p>Coordonnées atomiques expérimentales de l’amylase pancréatique de porc (<em>Sus scrofa</em>), structure PDB 3L2L obtenue par diffraction des rayons X (résolution 2,11 Å).</p>
-        <ul>
-          <li><strong>Amylase</strong> : surface moléculaire calculée à partir des 3 909 atomes (hors hydrogène) de la protéine.</li>
-          <li><strong>Fragments glucidiques associés à l’amylase</strong> : courtes chaînes de glucose (124 atomes) issues de la digestion du glycogène pendant la purification de l’enzyme. Ce ne sont pas des molécules d’amidon intactes. Une partie de ces fragments est fixée dans le sillon du site actif ; d’autres sont fixés ailleurs à la surface.</li>
-          <li><strong>Site actif</strong> : partie de la surface formée par les chaînes latérales des trois acides aminés catalytiques (Asp197, Glu233, Asp300), identifiés par des études structurales et de mutagenèse, et de quatre histidines du site qui établissent des liaisons avec le ligand (His101, His201, His299, His305). Les autres zones où se fixent des fragments glucidiques ne sont pas colorées : ce ne sont pas des sites catalytiques.</li>
-          <li>L’eau et les ions (calcium, chlorure) ne sont pas représentés. Les positions relatives des atomes sont conservées ; seule la surface a été lissée et allégée pour l’affichage.</li>
-        </ul>
-        <p class="small">Sources :<br>
-          Larson, S. B., Day, J. S., &amp; McPherson, A. (2010). <em>Biochemistry, 49</em>(14), 3101–3115. https://doi.org/10.1021/bi902183w<br>
-          Qian, M., Haser, R., Buisson, G., Duée, E., &amp; Payan, F. (1994). <em>Biochemistry, 33</em>(20), 6284–6294. https://doi.org/10.1021/bi00186a031<br>
-          Rydberg, E. H., et al. (2002). <em>Biochemistry, 41</em>(13), 4492–4502. https://doi.org/10.1021/bi011821z<br>
-          RCSB Protein Data Bank, entrée 3L2L : <a href="https://www.rcsb.org/structure/3L2L" target="_blank" rel="noopener">rcsb.org/structure/3L2L</a><br>
-          Affichage : &lt;model-viewer&gt; (Google, licence Apache 2.0).</p>
-        <p class="small">La caméra n’est utilisée que pendant la réalité augmentée, par l’application de votre appareil. Aucune image n’est enregistrée ni envoyée.</p>
-      </details>
-    </div>
+    <details class="about">
+      <summary>À propos du modèle et sources</summary>
+      <p><strong>Ce qui vient de l’expérience.</strong> L’amylase est représentée à partir des coordonnées atomiques de la structure PDB 3L2L (amylase pancréatique de porc, diffraction des rayons X, 2,11 Å ; 3 909 atomes, hors hydrogène). La surface montre le volume de la protéine ; le ruban coloré relie les 496 acides aminés dans l’ordre de la séquence.</p>
+      <p><strong>Le site actif</strong> (en vert) correspond aux chaînes latérales des acides aminés catalytiques Asp197, Glu233 et Asp300 et des histidines His101, His201, His299 et His305, en contact avec le ligand dans la structure de l’enzyme liée à l’acarbose (PDB 1PPI).</p>
+      <p><strong>Le substrat</strong> est une portion d’amylose de 7 glucoses. Les 5 glucoses d’un côté occupent les positions d’un fragment glucidique réellement observé dans le site de 3L2L (issu de la digestion du glycogène pendant la purification de l’enzyme ; sa ramification α-1,6 a été retirée). Les 2 autres sont placés sur les cycles observés dans 1PPI, après superposition des deux enzymes (écart moyen entre carbones α : 0,9 Å). <strong>L’arrivée, la coupure et le départ sont des animations simplifiées</strong> : une structure cristallographique est statique et ne montre pas la réaction elle-même.</p>
+      <p><strong>La cellulose</strong> est une chaîne régulière de 4 glucoses liés en β-1,4, construite à partir d’un β-glucose observé dans 1PPI (un glucose tous les 5,1 Å environ). Elle est placée devant l’enzyme pour comparer les formes ; aucune fixation n’est représentée.</p>
+      <p class="small">L’eau et les ions (calcium, chlorure) ne sont pas représentés. La caméra n’est utilisée que pendant la réalité augmentée, par l’application de votre appareil ; aucune image n’est enregistrée ni envoyée.</p>
+      <p class="small">Sources :<br>
+        Brayer, G. D., et al. (2000). <em>Biochemistry, 39</em>(16), 4778–4791. https://doi.org/10.1021/bi9921182<br>
+        Larson, S. B., Day, J. S., &amp; McPherson, A. (2010). <em>Biochemistry, 49</em>(14), 3101–3115. https://doi.org/10.1021/bi902183w<br>
+        Qian, M., Haser, R., Buisson, G., Duée, E., &amp; Payan, F. (1994). <em>Biochemistry, 33</em>(20), 6284–6294. https://doi.org/10.1021/bi00186a031<br>
+        Rydberg, E. H., et al. (2002). <em>Biochemistry, 41</em>(13), 4492–4502. https://doi.org/10.1021/bi011821z<br>
+        IUBMB, ExplorEnz : EC 3.2.1.1 (α-amylase) et EC 3.2.1.4 (cellulase).<br>
+        RCSB Protein Data Bank : <a href="https://www.rcsb.org/structure/3L2L" target="_blank" rel="noopener">3L2L</a>, <a href="https://www.rcsb.org/structure/1PPI" target="_blank" rel="noopener">1PPI</a>. Affichage : model-viewer (Google, licence Apache 2.0).</p>
+    </details>
   </div>
-</main>
+</div>
+</div>
 
 <noscript><p style="padding:16px">Cette page a besoin de JavaScript pour afficher le modèle 3D.</p></noscript>
 
@@ -225,172 +204,272 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
 (function () {
   var mv = document.getElementById('viewer');
   var $ = function (id) { return document.getElementById(id); };
-  var state = { sugars: true, site: false };
-  // Repère du site actif (calculé par build_models.py : résidus 197, 233, 300, 101, 201, 299, 305)
-  var SITE = { target: '-0.0249m 0.229m 0.0744m', orbit: '-17.7deg 91.3deg 0.7m' };
-  // Valeurs recalculées à chaque génération des modèles (meta.json), si disponibles
-  if (location.protocol !== 'file:' && window.fetch) {
-    fetch('models/meta.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
-      if (!m || !m.site_target_m) return;
-      SITE.target = m.site_target_m.map(function (v) { return v + 'm'; }).join(' ');
-      SITE.orbit = m.site_orbit_deg[0] + 'deg ' + m.site_orbit_deg[1] + 'deg 0.7m';
-    }).catch(function () {});
-  }
   var isLocalFile = location.protocol === 'file:';
-  // Configuration facultative : embedModels charge les modèles depuis les copies .glb.js
   var CFG = window.AMYLASE_CONFIG || {};
   var embedModels = isLocalFile || !!CFG.embedModels;
   var ua = navigator.userAgent;
   var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var isAndroid = /Android/.test(ua);
-  var keepCamera = null, loaded = false, pendingSiteMove = false;
 
-  function key() { return 'amylase' + (state.sugars ? '-glucides' : '') + (state.site ? '-site' : ''); }
+  // Repères (légendes, caméra, animation) calculés par build_models.py : models/meta.json
+  var META = null;
+  var C = { violet: '#6a3db8', site: '#1bc689', sugar: '#f4a600', cel: '#2f6db5', cut: '#e31c2e', chain: '#2bb3d9', chainEnd: '#4b1f8f' };
 
-  // Message sur la réalité augmentée (le bouton est géré par model-viewer :
-  // Scene Viewer sur Android, Quick Look sur iPhone/iPad, WebXR si disponible)
+  // ------------------------------------------------------------ contenu des étapes
+  // labels : [repère, texte, couleur, côté, moment] ; moment = 'always' (défaut), 'cut' (pendant la coupure) ou 'end' (fin de l'animation)
+  var STEPS = [
+    {
+      model: 'etape1-structure', view: 'all',
+      legend: [['grad', 'Chaîne d’acides aminés (du 1er au 496e)'], [C.violet, 'Surface de la protéine']],
+      labels: [['proteine', 'Amylase : 1 chaîne de 496 acides aminés', C.violet], ['debut', 'Acide aminé n° 1', C.chain], ['fin', 'Acide aminé n° 496', C.chainEnd, 'left']],
+      html:
+        '<h2>1. Une protéine repliée en trois dimensions</h2>' +
+        '<h3>Observer</h3><p>Le ruban coloré suit la chaîne d’acides aminés de l’amylase, du bleu clair (1<sup>er</sup> acide aminé) au violet foncé (496<sup>e</sup>). La surface transparente montre le volume occupé par la molécule.</p>' +
+        '<h3>Comprendre</h3><p>L’amylase est une <strong>protéine</strong> : une seule chaîne de <strong>496 acides aminés</strong>. Cette chaîne ne reste pas allongée : elle se <strong>replie</strong> sur elle-même et prend une forme précise et compacte, d’environ 7,5 nm, appelée <strong>structure tridimensionnelle</strong>. Ce repliement dépend de la séquence des acides aminés. Il laisse à la surface de la molécule un <strong>sillon</strong>.</p>' +
+        '<p class="recherche">Ce modèle provient de l’expérience : des cristaux d’amylase de porc ont été analysés par diffraction des rayons X, ce qui donne la position de chacun de ses atomes (Larson et al., 2010).</p>' +
+        '<div class="question"><strong>À vous :</strong> repérez le début et la fin de la chaîne. Sont-ils proches dans la séquence ? dans l’espace ?</div>'
+    },
+    {
+      model: 'etape2-site', view: 'site',
+      legend: [[C.violet, 'Amylase'], [C.site, 'Site actif']],
+      labels: [['site', 'Site actif (au fond du sillon)', C.site], ['asp197', 'Asp 197', C.site], ['glu233', 'Glu 233', C.site], ['asp300', 'Asp 300', C.site, 'left']],
+      html:
+        '<h2>2. Le site actif</h2>' +
+        '<h3>Observer</h3><p>La zone verte, au fond du sillon, est le <strong>site actif</strong>. Il ne représente qu’une petite partie de la surface de l’enzyme.</p>' +
+        '<h3>Comprendre</h3><p>Le site actif est formé par quelques acides aminés : l’<strong>Asp 197</strong>, le <strong>Glu 233</strong> et l’<strong>Asp 300</strong> participent directement à la réaction ; quatre histidines (101, 201, 299 et 305) établissent des liaisons avec le substrat.</p>' +
+        '<p>Dans la séquence, ces acides aminés sont éloignés : 200 positions séparent le 101<sup>e</sup> du 305<sup>e</sup>. Pourtant, dans l’espace, ils sont à moins de 2,5 nm les uns des autres. C’est le <strong>repliement de la chaîne</strong> qui les rapproche et <strong>forme le site actif</strong>.</p>' +
+        '<p class="recherche">Ces acides aminés ont été identifiés en observant l’enzyme liée à des sucres (Qian et al., 1994), puis en les remplaçant un par un par mutation : remplacer l’Asp 197 divise l’activité de l’enzyme par environ un million (Brayer et al., 2000 ; Rydberg et al., 2002).</p>' +
+        '<div class="retenir"><strong>À retenir :</strong> la structure tridimensionnelle de l’enzyme rapproche des acides aminés éloignés dans la séquence et crée le site actif.</div>' +
+        '<div class="question"><strong>À vous :</strong> pourquoi le remplacement d’un seul acide aminé du site actif peut-il rendre l’enzyme inactive ?</div>'
+    },
+    {
+      model: 'etape3-fixation', view: 'complex', play: [0, 'bound'],
+      legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.sugar, 'Substrat : portion d’amidon']],
+      labels: [['substrat', 'Complexe enzyme-substrat', C.sugar, null, 'end']],
+      html:
+        '<h2>3. Le substrat se fixe : complexe enzyme-substrat</h2>' +
+        '<h3>Observer</h3><p>Une portion de chaîne d’<strong>amidon</strong> (7 glucoses, en orange) vient se loger dans le sillon, au contact du site actif.</p>' +
+        '<h3>Comprendre</h3><p>Le <strong>substrat</strong> de l’amylase est l’amidon : une longue chaîne de glucoses unis par des liaisons α-1,4. Une portion de cette chaîne se place dans le site actif car sa <strong>forme est complémentaire</strong> de celle du sillon. Des <strong>liaisons faibles</strong> (liaisons hydrogène) s’établissent entre les glucoses et des acides aminés du site, comme les histidines.</p>' +
+        '<p>L’association temporaire de l’enzyme et du substrat forme le <strong>complexe enzyme-substrat</strong>.</p>' +
+        '<p class="recherche">Le site actif de l’amylase accueille au moins cinq glucoses consécutifs, de part et d’autre de la liaison qui sera coupée (Brayer et al., 2000). Les positions des glucoses dans le sillon viennent de deux structures observées (3L2L et 1PPI).</p>' +
+        '<p class="modele">Modèle : le trajet d’arrivée du substrat est simplifié.</p>' +
+        '<div class="question"><strong>À vous :</strong> que signifie « forme complémentaire » ? Faites tourner le modèle pour observer comment la chaîne s’ajuste au sillon.</div>'
+    },
+    {
+      model: 'etape3-fixation', view: 'complex', play: ['bound', 'cut_end'],
+      legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.cut, 'Liaison coupée'], [C.sugar, 'Substrat puis produits']],
+      labels: [['liaison', 'Liaison α-1,4 coupée (hydrolyse)', C.cut, null, 'cut'], ['produitB', 'Maltose (2 glucoses)', C.sugar, null, 'end'], ['produitA', 'Chaîne d’amidon raccourcie', C.sugar, 'left', 'end'], ['site', 'Enzyme intacte, de nouveau libre', C.site, null, 'end']],
+      html:
+        '<h2>4. La catalyse : l’hydrolyse de l’amidon</h2>' +
+        '<h3>Observer</h3><p>La liaison marquée en rouge, entre deux glucoses, est coupée. Deux produits s’éloignent ; l’enzyme reste identique.</p>' +
+        '<h3>Comprendre</h3><p>Dans le complexe enzyme-substrat, l’Asp 197, le Glu 233 et l’Asp 300 entourent la liaison α-1,4 située au centre du site actif. Ils permettent sa coupure avec une molécule d’eau : c’est une <strong>hydrolyse</strong>, la <strong>réaction catalysée</strong> par l’amylase.</p>' +
+        '<p>Les <strong>produits</strong> sont libérés : ici du <strong>maltose</strong> (2 glucoses) et une chaîne raccourcie. L’enzyme n’est pas modifiée : elle peut fixer une nouvelle portion d’amidon. C’est un <strong>catalyseur biologique</strong>.</p>' +
+        '<p class="recherche">L’amylase coupe les liaisons α-1,4 en différents points de la chaîne ; en répétant ces coupures, elle transforme l’amidon en maltose et en petits fragments (IUBMB, EC 3.2.1.1).</p>' +
+        '<p class="modele">Modèle : la réaction réelle est beaucoup plus rapide ; l’animation est ralentie et simplifiée.</p>' +
+        '<div class="retenir"><strong>À retenir :</strong> la structure tridimensionnelle du site actif permet de fixer le substrat et de le transformer : l’enzyme catalyse une réaction précise sur un substrat précis.</div>' +
+        '<div class="question"><strong>À vous :</strong> pourquoi une petite quantité d’amylase suffit-elle à hydrolyser une grande quantité d’amidon ?</div>'
+    },
+    {
+      model: 'etape5-cellulose', view: 'cellulose',
+      legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.sugar, 'Amidon'], [C.cel, 'Cellulose']],
+      labels: [['amidon', 'Amidon : glucoses liés en α-1,4', C.sugar], ['cellulose', 'Cellulose : glucoses liés en β-1,4', C.cel, 'left']],
+      html:
+        '<h2>5. Et la cellulose ?</h2>' +
+        '<h3>Observer</h3><p>À côté de l’enzyme sont placées deux portions de chaînes : de l’<strong>amidon</strong> (orange) et de la <strong>cellulose</strong> (bleu). Faites tourner le modèle pour comparer leurs formes.</p>' +
+        '<h3>Information</h3><p>La cellulose, constituant des parois des cellules végétales, est elle aussi une chaîne de glucoses. Seule l’orientation de la liaison entre deux glucoses diffère : α-1,4 dans l’amidon, β-1,4 dans la cellulose.</p>' +
+        '<div class="question"><strong>À vous :</strong><ol>' +
+          '<li>Décrivez les différences de forme entre les deux chaînes.</li>' +
+          '<li>Formulez une hypothèse : l’amylase peut-elle fixer la cellulose et l’hydrolyser ? Justifiez en vous appuyant sur la forme du site actif.</li>' +
+          '<li>Proposez une expérience pour tester votre hypothèse : quels tubes, quels témoins, quel réactif pour détecter les produits ?</li>' +
+        '</ol></div>'
+    }
+  ];
+
+  // ------------------------------------------------------------ chargement des modèles
+  var current = -1, loaded = false, blobUrls = {}, pending = null, stopAt = null;
+
+  function setModel(name) {
+    if (mv.dataset.model === name && loaded) { onModelReady(); return; }
+    mv.dataset.model = name;
+    $('loading').hidden = false;
+    if (!embedModels) {
+      mv.setAttribute('ios-src', 'models/' + name + '.usdz');
+      mv.src = 'models/' + name + '.glb';
+      return;
+    }
+    if (blobUrls[name]) { mv.src = blobUrls[name]; return; }
+    var s = document.createElement('script');
+    s.src = 'models/' + name + '.glb.js';
+    s.onload = function () {
+      var b64 = window.__GLB[name], bin = atob(b64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      blobUrls[name] = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
+      delete window.__GLB[name];
+      mv.src = blobUrls[name];
+    };
+    s.onerror = showLoadError;
+    document.head.appendChild(s);
+  }
+  function showLoadError() {
+    $('loading').hidden = true;
+    $('error').textContent = 'Le modèle n’a pas pu être chargé. Vérifiez la connexion Internet, puis rechargez la page.';
+    $('error').hidden = false;
+  }
+
+  // ------------------------------------------------------------ caméra
+  function m3(a) { return a[0] + 'm ' + a[1] + 'm ' + a[2] + 'm'; }
+  function setView(view) {
+    var o = META.site_orbit_deg, t = META.site_target_m;
+    if (view === 'all') { mv.cameraTarget = 'auto auto auto'; mv.cameraOrbit = '0deg 75deg auto'; }
+    else if (view === 'site') { mv.cameraTarget = m3(t); mv.cameraOrbit = o[0] + 'deg ' + o[1] + 'deg 0.75m'; }
+    else if (view === 'complex') { mv.cameraTarget = m3(t); mv.cameraOrbit = (o[0] + 20) + 'deg ' + (o[1] - 8) + 'deg 1.05m'; }
+    else if (view === 'cellulose') { mv.cameraTarget = 'auto auto auto'; mv.cameraOrbit = o[0] + 'deg ' + o[1] + 'deg auto'; }
+    mv.fieldOfView = 'auto';
+  }
+
+  // ------------------------------------------------------------ légendes et légende des couleurs
+  var hotspotEls = [];
+  function clearLabels() { hotspotEls.forEach(function (el) { el.remove(); }); hotspotEls = []; }
+  function showLabels(step, phase) {
+    clearLabels();
+    step.labels.forEach(function (l) {
+      var when = l[4] || 'always';
+      if (when !== 'always' && when !== phase) return;
+      var pos = META.hotspots[l[0]]; if (!pos) return;
+      var b = document.createElement('div');
+      b.className = 'hotspot' + (l[3] === 'left' ? ' left' : '');
+      b.slot = 'hotspot-' + l[0];
+      b.dataset.position = m3(pos);
+      b.style.setProperty('--c', l[2]);
+      var s = document.createElement('span'); s.className = 'lab'; s.textContent = l[1]; b.appendChild(s);
+      mv.appendChild(b); hotspotEls.push(b);
+    });
+  }
+  function setLegend(step) {
+    var lg = $('legend'); lg.textContent = '';
+    step.legend.forEach(function (e) {
+      var s = document.createElement('span'), i = document.createElement('i');
+      if (e[0] === 'grad') i.className = 'grad'; else i.style.background = e[0];
+      s.appendChild(i); s.appendChild(document.createTextNode(e[1])); lg.appendChild(s);
+    });
+  }
+
+  // ------------------------------------------------------------ animation (étapes 3 et 4)
+  function tval(v) { return typeof v === 'number' ? v : META.anim[v]; }
+  function runSegment(step) {
+    var a = tval(step.play[0]), b = tval(step.play[1]);
+    mv.animationName = META.anim.name;
+    mv.pause(); mv.currentTime = a;
+    showLabels(step, a > 0 ? 'cut' : 'start');
+    stopAt = { t: b, step: step };
+    mv.play();
+    requestAnimationFrame(watch);
+  }
+  function watch() {
+    if (!stopAt) return;
+    var cut = stopAt.step.play[0] !== 0 && mv.currentTime > META.anim.bound + 1.6;
+    if (cut && !stopAt.cutDone) { stopAt.cutDone = true; showLabels(stopAt.step, 'none'); }
+    if (mv.currentTime >= stopAt.t - 0.02) {
+      mv.pause(); mv.currentTime = stopAt.t;
+      showLabels(stopAt.step, 'end'); stopAt = null; return;
+    }
+    requestAnimationFrame(watch);
+  }
+
+  // ------------------------------------------------------------ navigation
+  function goTo(i) {
+    if (i < 0 || i >= STEPS.length) return;
+    current = i;
+    var step = STEPS[i];
+    document.querySelectorAll('.steps button').forEach(function (b) {
+      if (+b.dataset.step === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+    $('panel').innerHTML = step.html;
+    $('prev').disabled = i === 0;
+    $('next').disabled = i === STEPS.length - 1;
+    $('replay').hidden = !step.play;
+    setLegend(step);
+    clearLabels();
+    stopAt = null;
+    try { history.replaceState(null, '', '#etape' + (i + 1)); } catch (e) {}
+    pending = step;
+    setModel(step.model);
+  }
+  function onModelReady() {
+    $('loading').hidden = true; $('error').hidden = true;
+    var step = pending; if (!step) return;
+    pending = null;
+    setView(step.view);
+    if (step.play) runSegment(step);
+    else showLabels(step, 'end');
+    updateAr();
+  }
+  mv.addEventListener('load', function () { loaded = true; onModelReady(); });
+  mv.addEventListener('progress', function (e) {
+    $('loading-text').textContent = 'Chargement du modèle moléculaire… ' + Math.round((e.detail.totalProgress || 0) * 100) + ' %';
+  });
+  mv.addEventListener('error', showLoadError);
+
+  document.querySelectorAll('.steps button').forEach(function (b) { b.addEventListener('click', function () { goTo(+b.dataset.step); }); });
+  $('prev').addEventListener('click', function () { goTo(current - 1); });
+  $('next').addEventListener('click', function () { goTo(current + 1); });
+  $('replay').addEventListener('click', function () { var s = STEPS[current]; setView(s.view); runSegment(s); });
+  $('btn-reset').addEventListener('click', function () { setView(STEPS[current].view); });
+  function zoom(f) { var o = mv.getCameraOrbit(); mv.cameraOrbit = o.theta + 'rad ' + o.phi + 'rad ' + (o.radius * f) + 'm'; }
+  $('zoom-in').addEventListener('click', function () { zoom(0.8); });
+  $('zoom-out').addEventListener('click', function () { zoom(1.25); });
+
+  // ------------------------------------------------------------ réalité augmentée
   function updateAr() {
     var info = $('ar-info');
     if (!loaded) return;
     if (mv.canActivateAR) {
       info.className = 'ar-info';
-      info.textContent = 'Touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table : le modèle s’y pose.';
+      info.textContent = 'Réalité augmentée : touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table. Le modèle de cette étape s’y pose' + (STEPS[current].play ? ', avec l’animation en boucle.' : '.');
       return;
     }
     info.className = 'ar-info warn';
-    if (isLocalFile || embedModels) {
-      info.textContent = 'La réalité augmentée nécessite la version en ligne du site. La vue 3D fonctionne ici.';
-    } else if (isIOS) {
-      info.textContent = 'Réalité augmentée indisponible dans ce navigateur : ouvrez le lien dans Safari. La vue 3D reste utilisable.';
-    } else if (isAndroid) {
-      info.textContent = 'Réalité augmentée indisponible : ouvrez le lien dans Chrome et vérifiez que « Services Google Play pour la RA » est installé. La vue 3D reste utilisable.';
-    } else {
-      info.textContent = 'La réalité augmentée est disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari). Ici, la vue 3D reste utilisable : tournez le modèle avec la souris ou le doigt.';
-    }
+    info.textContent = (isLocalFile || embedModels) ? 'La réalité augmentée nécessite la version en ligne du site.'
+      : isIOS ? 'Réalité augmentée indisponible dans ce navigateur : ouvrez le lien dans Safari.'
+      : isAndroid ? 'Réalité augmentée indisponible : ouvrez le lien dans Chrome et vérifiez que « Services Google Play pour la RA » est installé.'
+      : 'Réalité augmentée disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari).';
   }
-
-  // Chargement d'un modèle (en ligne : fichier .glb ; en local : copie intégrée .glb.js)
-  var blobUrls = {};
-  function setSource(k) {
-    if (!embedModels) {
-      mv.setAttribute('ios-src', 'models/' + k + '.usdz');
-      mv.src = 'models/' + k + '.glb';
-      return;
-    }
-    if (blobUrls[k]) { mv.src = blobUrls[k]; return; }
-    var s = document.createElement('script');
-    s.src = 'models/' + k + '.glb.js';
-    s.onload = function () {
-      var b64 = window.__GLB[k], bin = atob(b64), bytes = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      blobUrls[k] = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
-      delete window.__GLB[k];
-      mv.src = blobUrls[k];
-    };
-    s.onerror = showLoadError;
-    document.head.appendChild(s);
-  }
-
-  function applyModel() {
-    if (loaded && mv.getCameraOrbit) {
-      var o = mv.getCameraOrbit(), t = mv.getCameraTarget();
-      keepCamera = {
-        orbit: o.theta + 'rad ' + o.phi + 'rad ' + o.radius + 'm',
-        target: t.x + 'm ' + t.y + 'm ' + t.z + 'm',
-        fov: mv.getFieldOfView() + 'deg'
-      };
-    }
-    $('loading-text').textContent = 'Chargement…';
-    $('loading').hidden = false;
-    setSource(key());
-  }
-
-  function showLoadError() {
-    $('loading').hidden = true;
-    var box = $('error');
-    box.textContent = 'Le modèle n’a pas pu être chargé. Vérifiez la connexion Internet, puis rechargez la page.';
-    box.hidden = false;
-  }
-
-  mv.addEventListener('load', function () {
-    loaded = true;
-    $('loading').hidden = true;
-    $('error').hidden = true;
-    if (keepCamera) {
-      mv.cameraTarget = keepCamera.target;
-      mv.cameraOrbit = keepCamera.orbit;
-      mv.fieldOfView = keepCamera.fov;
-      mv.jumpCameraToGoal();
-      keepCamera = null;
-    }
-    if (state.site && pendingSiteMove) { moveToSite(); pendingSiteMove = false; }
-    updateAr();
-  });
   mv.addEventListener('ar-status', function (e) {
     if (e.detail.status === 'failed') {
-      var info = $('ar-info');
-      info.className = 'ar-info warn';
-      info.textContent = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible). La vue 3D reste disponible.';
+      $('ar-info').className = 'ar-info warn';
+      $('ar-info').textContent = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible). La vue 3D reste disponible.';
     }
   });
-  mv.addEventListener('progress', function (e) {
-    var p = Math.round((e.detail.totalProgress || 0) * 100);
-    if (!loaded) $('loading-text').textContent = 'Chargement du modèle moléculaire… ' + p + ' %';
-  });
-  mv.addEventListener('error', showLoadError);
 
-  // Composant 3D absent (navigateur trop ancien ou chargement bloqué)
+  // ------------------------------------------------------------ démarrage
+  function start() {
+    if (!META) { showLoadError(); return; }
+    var m = /^#etape([1-5])$/.exec(location.hash);
+    goTo(m ? +m[1] - 1 : 0);
+  }
+  function loadMeta() {
+    if (embedModels) {                      // ouverture locale : repères intégrés (meta.js)
+      var s = document.createElement('script');
+      s.src = 'models/meta.js';
+      s.onload = function () { META = window.__META; start(); };
+      s.onerror = showLoadError;
+      document.head.appendChild(s);
+      return;
+    }
+    fetch('models/meta.json').then(function (r) { return r.json(); })
+      .then(function (m) { META = m; }).catch(function () {}).then(start);
+  }
   var tries = 0;
   (function waitComponent() {
-    if (window.customElements && customElements.get('model-viewer')) { applyModel(); return; }
+    if (window.customElements && customElements.get('model-viewer')) { loadMeta(); return; }
     if (++tries > 40) {
       $('loading').hidden = true;
-      var box = $('error');
-      box.textContent = 'Le composant 3D n’a pas pu démarrer. Vérifiez la connexion Internet, ou ouvrez le lien avec un navigateur à jour (Chrome, Firefox, Safari, Edge).';
-      box.hidden = false;
+      $('error').textContent = 'Le composant 3D n’a pas pu démarrer. Vérifiez la connexion Internet, ou ouvrez le lien avec un navigateur à jour (Chrome, Firefox, Safari, Edge).';
+      $('error').hidden = false;
       return;
     }
     setTimeout(waitComponent, 250);
   })();
-
-  function resetView() {
-    mv.cameraTarget = 'auto auto auto';
-    mv.cameraOrbit = '0deg 75deg auto';
-    mv.fieldOfView = 'auto';
-  }
-  function moveToSite() {
-    mv.cameraTarget = SITE.target;
-    mv.cameraOrbit = SITE.orbit;
-    mv.fieldOfView = 'auto';
-  }
-
-  $('btn-reset').addEventListener('click', resetView);
-  $('btn-sugar').addEventListener('click', function () {
-    state.sugars = !state.sugars;
-    this.setAttribute('aria-pressed', String(state.sugars));
-    $('lg-sugar').hidden = !state.sugars;
-    applyModel();
-  });
-  $('btn-site').addEventListener('click', function () {
-    state.site = !state.site;
-    this.setAttribute('aria-pressed', String(state.site));
-    $('lg-site').hidden = !state.site;
-    $('site-caption').hidden = !state.site;
-    pendingSiteMove = state.site;
-    applyModel();
-    if (!state.site) resetView();
-  });
-  $('btn-info').addEventListener('click', function () { var d = $('info'); d.open = !d.open; });
-  $('info').addEventListener('toggle', function () {
-    $('btn-info').setAttribute('aria-pressed', String(this.open));
-    if (this.open) this.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  });
-  function zoom(f) {
-    var o = mv.getCameraOrbit();
-    mv.cameraOrbit = o.theta + 'rad ' + o.phi + 'rad ' + (o.radius * f) + 'm';
-  }
-  $('zoom-in').addEventListener('click', function () { zoom(0.8); });
-  $('zoom-out').addEventListener('click', function () { zoom(1.25); });
 })();
 </script>
 </body>
