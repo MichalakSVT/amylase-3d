@@ -51,8 +51,8 @@ model-viewer {
   --poster-color: transparent; --progress-bar-color: var(--violet);
 }
 
-/* Bouton de réalité augmentée (slot de model-viewer) */
-#ar-button { text-decoration: none; z-index: 2;
+/* Bouton de réalité augmentée (slot de model-viewer, affiché seulement si la RA est possible) */
+#ar-button { z-index: 2;
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   background: var(--violet); color: #fff; border: 0; border-radius: 999px;
   font: 700 1.05rem var(--font); padding: 13px 22px; white-space: nowrap;
@@ -147,11 +147,11 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
       camera-orbit="0deg 75deg auto" min-camera-orbit="auto auto 15%" max-camera-orbit="auto auto 250%"
       interpolation-decay="120"
       shadow-intensity="0.6" exposure="0.95" environment-image="neutral"
-      loading="eager" reveal="auto">
+      loading="eager" reveal="auto"
+      ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto">
+      <button id="ar-button" slot="ar-button" type="button">Observer dans mon environnement</button>
       <div slot="progress-bar"></div>
     </model-viewer>
-
-    <a id="ar-button" href="#" target="_blank" rel="noopener" hidden>Observer dans mon environnement</a>
 
     <div class="legend" aria-label="Légende">
       <span><i style="background:var(--violet)"></i>Amylase</span>
@@ -237,12 +237,9 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
     }).catch(function () {});
   }
   var isLocalFile = location.protocol === 'file:';
-  // Configuration facultative (version hébergée sur claude.ai) :
-  //   embedModels : charge les modèles depuis les copies .glb.js ;
-  //   arBase : adresse publique du dossier des modèles pour la RA ('' = même dossier, null = RA indisponible).
+  // Configuration facultative : embedModels charge les modèles depuis les copies .glb.js
   var CFG = window.AMYLASE_CONFIG || {};
   var embedModels = isLocalFile || !!CFG.embedModels;
-  var arBase = (CFG.arBase === undefined) ? '' : CFG.arBase;
   var ua = navigator.userAgent;
   var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var isAndroid = /Android/.test(ua);
@@ -250,40 +247,36 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
 
   function key() { return 'amylase' + (state.sugars ? '-glucides' : '') + (state.site ? '-site' : ''); }
 
-  // Lien de réalité augmentée pour le modèle affiché
-  function arLink() {
-    if (arBase === null) return null;
-    var k = key();
-    var absUrl = function (p) { return new URL(p, arBase ? arBase : location.href).href; };
-    if (isIOS) return absUrl('models/' + k + '.usdz');
-    if (isAndroid) {
-      return 'https://arvr.google.com/scene-viewer/1.0?file=' + encodeURIComponent(absUrl('models/' + k + '.glb')) +
-        '&mode=ar_preferred&resizable=true&title=' + encodeURIComponent('Amylase (modèle moléculaire agrandi)');
-    }
-    return null;
-  }
+  // Message sur la réalité augmentée (le bouton est géré par model-viewer :
+  // Scene Viewer sur Android, Quick Look sur iPhone/iPad, WebXR si disponible)
   function updateAr() {
-    var btn = $('ar-button'), info = $('ar-info');
-    var link = isLocalFile ? null : arLink();
-    if (link) {
-      btn.href = link; btn.hidden = false;
+    var info = $('ar-info');
+    if (!loaded) return;
+    if (mv.canActivateAR) {
       info.className = 'ar-info';
       info.textContent = 'Touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table : le modèle s’y pose.';
+      return;
+    }
+    info.className = 'ar-info warn';
+    if (isLocalFile || embedModels) {
+      info.textContent = 'La réalité augmentée nécessite la version en ligne du site. La vue 3D fonctionne ici.';
+    } else if (isIOS) {
+      info.textContent = 'Réalité augmentée indisponible dans ce navigateur : ouvrez le lien dans Safari. La vue 3D reste utilisable.';
+    } else if (isAndroid) {
+      info.textContent = 'Réalité augmentée indisponible : ouvrez le lien dans Chrome et vérifiez que « Services Google Play pour la RA » est installé. La vue 3D reste utilisable.';
     } else {
-      btn.hidden = true;
-      info.className = 'ar-info warn';
-      info.textContent = isLocalFile
-        ? 'Page ouverte depuis un fichier : la vue 3D fonctionne, la réalité augmentée nécessite la version en ligne.'
-        : (arBase === null && (isIOS || isAndroid))
-        ? 'Pour la réalité augmentée, scannez le QR code « Réalité augmentée » fourni par votre professeur.'
-        : 'La réalité augmentée est disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari). Ici, la vue 3D reste utilisable : tournez le modèle avec la souris ou le doigt.';
+      info.textContent = 'La réalité augmentée est disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari). Ici, la vue 3D reste utilisable : tournez le modèle avec la souris ou le doigt.';
     }
   }
 
   // Chargement d'un modèle (en ligne : fichier .glb ; en local : copie intégrée .glb.js)
   var blobUrls = {};
   function setSource(k) {
-    if (!embedModels) { mv.src = 'models/' + k + '.glb'; return; }
+    if (!embedModels) {
+      mv.setAttribute('ios-src', 'models/' + k + '.usdz');
+      mv.src = 'models/' + k + '.glb';
+      return;
+    }
     if (blobUrls[k]) { mv.src = blobUrls[k]; return; }
     var s = document.createElement('script');
     s.src = 'models/' + k + '.glb.js';
@@ -310,7 +303,6 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
     $('loading-text').textContent = 'Chargement…';
     $('loading').hidden = false;
     setSource(key());
-    updateAr();
   }
 
   function showLoadError() {
@@ -332,6 +324,14 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
       keepCamera = null;
     }
     if (state.site && pendingSiteMove) { moveToSite(); pendingSiteMove = false; }
+    updateAr();
+  });
+  mv.addEventListener('ar-status', function (e) {
+    if (e.detail.status === 'failed') {
+      var info = $('ar-info');
+      info.className = 'ar-info warn';
+      info.textContent = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible). La vue 3D reste disponible.';
+    }
   });
   mv.addEventListener('progress', function (e) {
     var p = Math.round((e.detail.totalProgress || 0) * 100);
@@ -391,8 +391,6 @@ details ul { padding-left: 1.2em; margin: .4em 0; }
   }
   $('zoom-in').addEventListener('click', function () { zoom(0.8); });
   $('zoom-out').addEventListener('click', function () { zoom(1.25); });
-
-  updateAr();
 })();
 </script>
 </body>
