@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Installer les outils de modélisation
-        run: pip install gemmi==0.7.5 numpy==2.5.3 scipy==1.18.1 scikit-image==0.26.0 trimesh==5.2.0 rtree==1.4.1 fast-simplification==0.2.0 usd-core==26.11
+        run: pip install gemmi==0.7.5 numpy==2.5.3 scipy==1.18.1 scikit-image==0.26.0 trimesh==5.2.0 rtree==1.4.1 fast-simplification==0.2.0 usd-core==26.11 pygltflib==1.16.5
       - name: Télécharger la structure PDB 3L2L
         run: curl -fsSL -o 3L2L.pdb https://files.rcsb.org/download/3L2L.pdb
       - name: Construire les modèles GLB et USDZ
