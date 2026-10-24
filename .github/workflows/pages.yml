@@ -1,0 +1,51 @@
+name: Construire et publier le site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Installer les outils de modélisation
+        run: pip install gemmi==0.7.5 numpy==2.5.3 scipy==1.18.1 scikit-image==0.26.0 trimesh==5.2.0 rtree==1.4.1 fast-simplification==0.2.0 usd-core==26.11
+      - name: Télécharger la structure PDB 3L2L
+        run: curl -fsSL -o 3L2L.pdb https://files.rcsb.org/download/3L2L.pdb
+      - name: Construire les modèles GLB et USDZ
+        run: python build_models.py 3L2L.pdb site/models
+      - name: Ajouter le composant model-viewer 4.3.1
+        run: |
+          mkdir -p site/lib
+          cd "$RUNNER_TEMP"
+          npm pack @google/model-viewer@4.3.1
+          tar xzf google-model-viewer-4.3.1.tgz
+          cp package/dist/model-viewer-umd.min.js package/LICENSE "$GITHUB_WORKSPACE/site/lib/"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
