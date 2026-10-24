@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>L’amylase en trois dimensions</title>
+<meta name="description" content="Observer la structure 3D de l’amylase pancréatique porcine (PDB 3L2L) et la placer en réalité augmentée.">
+<meta name="theme-color" content="#f7f6fb">
+<style>
+/* Mise en page : une grande zone d’observation, une barre de commandes sous le modèle. */
+:root {
+  --bg: #f7f6fb;
+  --panel: #ffffff;
+  --ink: #1f1b2b;
+  --muted: #5d5770;
+  --line: #dcd7e8;
+  --violet: #6a3db8;
+  --violet-dark: #5a339e;
+  --sugar: #f4a600;
+  --site: #1bc689;
+  --font: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 17px; line-height: 1.4;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+header {
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px));
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+h1 { font-size: 1.35rem; margin: 0; font-weight: 700; }
+.source-tag { font-size: .85rem; color: var(--muted); }
+
+main {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px));
+  gap: 10px;
+}
+.stage {
+  position: relative; flex: 1; min-height: 300px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+}
+model-viewer {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #fbfaff;
+  --poster-color: transparent; --progress-bar-color: var(--violet);
+}
+
+/* Bouton de réalité augmentée (slot de model-viewer) */
+#ar-button { text-decoration: none; z-index: 2;
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  background: var(--violet); color: #fff; border: 0; border-radius: 999px;
+  font: 700 1.05rem var(--font); padding: 13px 22px; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(90,51,158,.35); cursor: pointer;
+}
+#ar-button:active { background: var(--violet-dark); }
+
+.legend {
+  position: absolute; top: 10px; left: 10px; right: 64px;
+  display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .9rem; pointer-events: none;
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.88); padding: 3px 8px; border-radius: 8px; }
+.legend i { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
+.scale-note { position: absolute; left: 12px; bottom: 74px; font-size: .8rem; color: var(--muted); pointer-events: none; }
+
+.zoom { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 6px; }
+.zoom button {
+  width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font: 700 1.4rem var(--font); cursor: pointer;
+}
+
+.site-caption {
+  position: absolute; left: 10px; right: 10px; bottom: 72px; margin: 0 auto; max-width: 460px;
+  background: #ffffff; border: 2px solid var(--site); border-radius: 10px; padding: 8px 12px; font-size: .95rem;
+}
+
+.loading {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: var(--muted); background: #fbfaff; font-size: 1rem;
+}
+.spinner { width: 34px; height: 34px; border: 4px solid var(--line); border-top-color: var(--violet); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.error { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #fff; }
+
+.controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.controls button {
+  min-height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  font: 600 .98rem var(--font); padding: 6px 8px; cursor: pointer;
+}
+.controls button[aria-pressed="true"] { background: #efe9fa; border-color: var(--violet); color: var(--violet-dark); }
+.controls button:focus-visible, .zoom button:focus-visible, #ar-button:focus-visible, summary:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
+
+.ar-info { font-size: .9rem; color: var(--muted); margin: 0; }
+.ar-info.warn { color: #8a4b00; }
+
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+summary { cursor: pointer; font-weight: 700; }
+details p, details li { font-size: .95rem; }
+details ul { padding-left: 1.2em; margin: .4em 0; }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.small { font-size: .85rem; color: var(--muted); }
+
+@media (max-width: 640px) {
+  .controls { grid-template-columns: 1fr 1fr; }
+  .panels { grid-template-columns: 1fr; }
+  .stage { min-height: 58vh; }
+  main { overflow-y: auto; }
+  body { height: auto; min-height: 100%; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  header { padding-block: 4px; }
+  h1 { font-size: 1.1rem; }
+  main { flex-direction: row; flex-wrap: wrap; overflow-y: auto; }
+  .stage { flex: 1 1 60%; min-height: 78vh; }
+  .side { flex: 1 1 34%; min-width: 230px; display: flex; flex-direction: column; gap: 8px; }
+  .controls { grid-template-columns: 1fr 1fr; }
+  .panels { grid-template-columns: 1fr; }
+}
+</style>
+<script>
+  // Composant 3D : copie locale, sinon CDN jsDelivr (même version).
+  function mvFallback() {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer-umd.min.js';
+    document.head.appendChild(s);
+  }
+</script>
+<script src="lib/model-viewer-umd.min.js" onerror="mvFallback()"></script>
+</head>
+<body>
+<header>
+  <h1>L’amylase en trois dimensions</h1>
+  <span class="source-tag">Amylase pancréatique de porc · PDB 3L2L</span>
+</header>
+
+<main>
+  <div class="stage">
+    <model-viewer id="viewer"
+      alt="Modèle 3D de l’amylase (surface violette) et des fragments glucidiques associés (sphères orange)"
+      camera-controls touch-action="pan-y"
+      camera-orbit="0deg 75deg auto" min-camera-orbit="auto auto 15%" max-camera-orbit="auto auto 250%"
+      interpolation-decay="120"
+      shadow-intensity="0.6" exposure="0.95" environment-image="neutral"
+      loading="eager" reveal="auto">
+      <div slot="progress-bar"></div>
+    </model-viewer>
+
+    <a id="ar-button" href="#" target="_blank" rel="noopener" hidden>Observer dans mon environnement</a>
+
+    <div class="legend" aria-label="Légende">
+      <span><i style="background:var(--violet)"></i>Amylase</span>
+      <span id="lg-sugar"><i style="background:var(--sugar)"></i>Fragments glucidiques associés à l’amylase</span>
+      <span id="lg-site" hidden><i style="background:var(--site)"></i>Site actif</span>
+    </div>
+
+    <div class="zoom">
+      <button id="zoom-in" type="button" aria-label="Zoomer">+</button>
+      <button id="zoom-out" type="button" aria-label="Dézoomer">−</button>
+    </div>
+
+    <p class="scale-note">Modèle moléculaire agrandi (environ 60 millions de fois)</p>
+
+    <p class="site-caption" id="site-caption" hidden>
+      <strong>Site actif</strong> (en vert) : région de l’enzyme où le substrat se fixe et où se déroule sa transformation.
+    </p>
+
+    <div class="loading" id="loading">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="loading-text">Chargement du modèle moléculaire…</div>
+    </div>
+    <div class="error" id="error" hidden></div>
+  </div>
+
+  <div class="side">
+    <div class="controls">
+      <button id="btn-reset" type="button">Réinitialiser la vue</button>
+      <button id="btn-sugar" type="button" aria-pressed="true">Fragments glucidiques</button>
+      <button id="btn-site" type="button" aria-pressed="false">Repérer le site actif</button>
+      <button id="btn-info" type="button" aria-pressed="false" aria-controls="info">Informations</button>
+    </div>
+
+    <p class="ar-info" id="ar-info">Tournez le modèle avec un doigt, zoomez en pinçant l’écran.</p>
+
+    <div class="panels">
+      <details id="info">
+        <summary>Informations</summary>
+        <ul>
+          <li>Une enzyme est une protéine possédant une structure tridimensionnelle.</li>
+          <li>Le site actif est la région de l’enzyme où le substrat se fixe et où se déroule sa transformation.</li>
+          <li>L’association temporaire de l’enzyme et du substrat forme un complexe enzyme-substrat.</li>
+        </ul>
+        <p class="small">Ce modèle est construit à partir d’une structure expérimentale : c’est une représentation statique, figée au moment de l’expérience. Il ne montre pas directement la transformation chimique.</p>
+      </details>
+
+      <details id="about">
+        <summary>À propos du modèle</summary>
+        <p>Coordonnées atomiques expérimentales de l’amylase pancréatique de porc (<em>Sus scrofa</em>), structure PDB 3L2L obtenue par diffraction des rayons X (résolution 2,11 Å).</p>
+        <ul>
+          <li><strong>Amylase</strong> : surface moléculaire calculée à partir des 3 909 atomes (hors hydrogène) de la protéine.</li>
+          <li><strong>Fragments glucidiques associés à l’amylase</strong> : courtes chaînes de glucose (124 atomes) issues de la digestion du glycogène pendant la purification de l’enzyme. Ce ne sont pas des molécules d’amidon intactes. Une partie de ces fragments est fixée dans le sillon du site actif ; d’autres sont fixés ailleurs à la surface.</li>
+          <li><strong>Site actif</strong> : partie de la surface formée par les chaînes latérales des trois acides aminés catalytiques (Asp197, Glu233, Asp300), identifiés par des études structurales et de mutagenèse, et de quatre histidines du site qui établissent des liaisons avec le ligand (His101, His201, His299, His305). Les autres zones où se fixent des fragments glucidiques ne sont pas colorées : ce ne sont pas des sites catalytiques.</li>
+          <li>L’eau et les ions (calcium, chlorure) ne sont pas représentés. Les positions relatives des atomes sont conservées ; seule la surface a été lissée et allégée pour l’affichage.</li>
+        </ul>
+        <p class="small">Sources :<br>
+          Larson, S. B., Day, J. S., &amp; McPherson, A. (2010). <em>Biochemistry, 49</em>(14), 3101–3115. https://doi.org/10.1021/bi902183w<br>
+          Qian, M., Haser, R., Buisson, G., Duée, E., &amp; Payan, F. (1994). <em>Biochemistry, 33</em>(20), 6284–6294. https://doi.org/10.1021/bi00186a031<br>
+          Rydberg, E. H., et al. (2002). <em>Biochemistry, 41</em>(13), 4492–4502. https://doi.org/10.1021/bi011821z<br>
+          RCSB Protein Data Bank, entrée 3L2L : <a href="https://www.rcsb.org/structure/3L2L" target="_blank" rel="noopener">rcsb.org/structure/3L2L</a><br>
+          Affichage : &lt;model-viewer&gt; (Google, licence Apache 2.0).</p>
+        <p class="small">La caméra n’est utilisée que pendant la réalité augmentée, par l’application de votre appareil. Aucune image n’est enregistrée ni envoyée.</p>
+      </details>
+    </div>
+  </div>
+</main>
+
+<noscript><p style="padding:16px">Cette page a besoin de JavaScript pour afficher le modèle 3D.</p></noscript>
+
+<script>
+(function () {
+  var mv = document.getElementById('viewer');
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { sugars: true, site: false };
+  // Repère du site actif (calculé par build_models.py : résidus 197, 233, 300, 101, 201, 299, 305)
+  var SITE = { target: '-0.0249m 0.229m 0.0744m', orbit: '-17.7deg 91.3deg 0.7m' };
+  // Valeurs recalculées à chaque génération des modèles (meta.json), si disponibles
+  if (location.protocol !== 'file:' && window.fetch) {
+    fetch('models/meta.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
+      if (!m || !m.site_target_m) return;
+      SITE.target = m.site_target_m.map(function (v) { return v + 'm'; }).join(' ');
+      SITE.orbit = m.site_orbit_deg[0] + 'deg ' + m.site_orbit_deg[1] + 'deg 0.7m';
+    }).catch(function () {});
+  }
+  var isLocalFile = location.protocol === 'file:';
+  // Configuration facultative (version hébergée sur claude.ai) :
+  //   embedModels : charge les modèles depuis les copies .glb.js ;
+  //   arBase : adresse publique du dossier des modèles pour la RA ('' = même dossier, null = RA indisponible).
+  var CFG = window.AMYLASE_CONFIG || {};
+  var embedModels = isLocalFile || !!CFG.embedModels;
+  var arBase = (CFG.arBase === undefined) ? '' : CFG.arBase;
+  var ua = navigator.userAgent;
+  var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var keepCamera = null, loaded = false, pendingSiteMove = false;
+
+  function key() { return 'amylase' + (state.sugars ? '-glucides' : '') + (state.site ? '-site' : ''); }
+
+  // Lien de réalité augmentée pour le modèle affiché
+  function arLink() {
+    if (arBase === null) return null;
+    var k = key();
+    var absUrl = function (p) { return new URL(p, arBase ? arBase : location.href).href; };
+    if (isIOS) return absUrl('models/' + k + '.usdz');
+    if (isAndroid) {
+      return 'https://arvr.google.com/scene-viewer/1.0?file=' + encodeURIComponent(absUrl('models/' + k + '.glb')) +
+        '&mode=ar_preferred&resizable=true&title=' + encodeURIComponent('Amylase (modèle moléculaire agrandi)');
+    }
+    return null;
+  }
+  function updateAr() {
+    var btn = $('ar-button'), info = $('ar-info');
+    var link = isLocalFile ? null : arLink();
+    if (link) {
+      btn.href = link; btn.hidden = false;
+      info.className = 'ar-info';
+      info.textContent = 'Touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table : le modèle s’y pose.';
+    } else {
+      btn.hidden = true;
+      info.className = 'ar-info warn';
+      info.textContent = isLocalFile
+        ? 'Page ouverte depuis un fichier : la vue 3D fonctionne, la réalité augmentée nécessite la version en ligne.'
+        : (arBase === null && (isIOS || isAndroid))
+        ? 'Pour la réalité augmentée, scannez le QR code « Réalité augmentée » fourni par votre professeur.'
+        : 'La réalité augmentée est disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari). Ici, la vue 3D reste utilisable : tournez le modèle avec la souris ou le doigt.';
+    }
+  }
+
+  // Chargement d'un modèle (en ligne : fichier .glb ; en local : copie intégrée .glb.js)
+  var blobUrls = {};
+  function setSource(k) {
+    if (!embedModels) { mv.src = 'models/' + k + '.glb'; return; }
+    if (blobUrls[k]) { mv.src = blobUrls[k]; return; }
+    var s = document.createElement('script');
+    s.src = 'models/' + k + '.glb.js';
+    s.onload = function () {
+      var b64 = window.__GLB[k], bin = atob(b64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      blobUrls[k] = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
+      delete window.__GLB[k];
+      mv.src = blobUrls[k];
+    };
+    s.onerror = showLoadError;
+    document.head.appendChild(s);
+  }
+
+  function applyModel() {
+    if (loaded && mv.getCameraOrbit) {
+      var o = mv.getCameraOrbit(), t = mv.getCameraTarget();
+      keepCamera = {
+        orbit: o.theta + 'rad ' + o.phi + 'rad ' + o.radius + 'm',
+        target: t.x + 'm ' + t.y + 'm ' + t.z + 'm',
+        fov: mv.getFieldOfView() + 'deg'
+      };
+    }
+    $('loading-text').textContent = 'Chargement…';
+    $('loading').hidden = false;
+    setSource(key());
+    updateAr();
+  }
+
+  function showLoadError() {
+    $('loading').hidden = true;
+    var box = $('error');
+    box.textContent = 'Le modèle n’a pas pu être chargé. Vérifiez la connexion Internet, puis rechargez la page.';
+    box.hidden = false;
+  }
+
+  mv.addEventListener('load', function () {
+    loaded = true;
+    $('loading').hidden = true;
+    $('error').hidden = true;
+    if (keepCamera) {
+      mv.cameraTarget = keepCamera.target;
+      mv.cameraOrbit = keepCamera.orbit;
+      mv.fieldOfView = keepCamera.fov;
+      mv.jumpCameraToGoal();
+      keepCamera = null;
+    }
+    if (state.site && pendingSiteMove) { moveToSite(); pendingSiteMove = false; }
+  });
+  mv.addEventListener('progress', function (e) {
+    var p = Math.round((e.detail.totalProgress || 0) * 100);
+    if (!loaded) $('loading-text').textContent = 'Chargement du modèle moléculaire… ' + p + ' %';
+  });
+  mv.addEventListener('error', showLoadError);
+
+  // Composant 3D absent (navigateur trop ancien ou chargement bloqué)
+  var tries = 0;
+  (function waitComponent() {
+    if (window.customElements && customElements.get('model-viewer')) { applyModel(); return; }
+    if (++tries > 40) {
+      $('loading').hidden = true;
+      var box = $('error');
+      box.textContent = 'Le composant 3D n’a pas pu démarrer. Vérifiez la connexion Internet, ou ouvrez le lien avec un navigateur à jour (Chrome, Firefox, Safari, Edge).';
+      box.hidden = false;
+      return;
+    }
+    setTimeout(waitComponent, 250);
+  })();
+
+  function resetView() {
+    mv.cameraTarget = 'auto auto auto';
+    mv.cameraOrbit = '0deg 75deg auto';
+    mv.fieldOfView = 'auto';
+  }
+  function moveToSite() {
+    mv.cameraTarget = SITE.target;
+    mv.cameraOrbit = SITE.orbit;
+    mv.fieldOfView = 'auto';
+  }
+
+  $('btn-reset').addEventListener('click', resetView);
+  $('btn-sugar').addEventListener('click', function () {
+    state.sugars = !state.sugars;
+    this.setAttribute('aria-pressed', String(state.sugars));
+    $('lg-sugar').hidden = !state.sugars;
+    applyModel();
+  });
+  $('btn-site').addEventListener('click', function () {
+    state.site = !state.site;
+    this.setAttribute('aria-pressed', String(state.site));
+    $('lg-site').hidden = !state.site;
+    $('site-caption').hidden = !state.site;
+    pendingSiteMove = state.site;
+    applyModel();
+    if (!state.site) resetView();
+  });
+  $('btn-info').addEventListener('click', function () { var d = $('info'); d.open = !d.open; });
+  $('info').addEventListener('toggle', function () {
+    $('btn-info').setAttribute('aria-pressed', String(this.open));
+    if (this.open) this.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  function zoom(f) {
+    var o = mv.getCameraOrbit();
+    mv.cameraOrbit = o.theta + 'rad ' + o.phi + 'rad ' + (o.radius * f) + 'm';
+  }
+  $('zoom-in').addEventListener('click', function () { zoom(0.8); });
+  $('zoom-out').addEventListener('click', function () { zoom(1.25); });
+
+  updateAr();
+})();
+</script>
+</body>
+</html>
