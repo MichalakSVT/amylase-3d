@@ -22,19 +22,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Installer les outils de modélisation
-        run: pip install gemmi==0.7.5 numpy==2.5.3 scipy==1.18.1 scikit-image==0.26.0 trimesh==5.2.0 rtree==1.4.1 fast-simplification==0.2.0 usd-core==26.11 pygltflib==1.16.5
+      - name: Installer les outils
+        run: |
+          sudo apt-get install -y fonts-dejavu-core
+          pip install gemmi==0.7.5 numpy==2.5.3 scipy==1.18.1 scikit-image==0.26.0 trimesh==5.2.0 rtree==1.4.1 fast-simplification==0.2.0 usd-core==26.11 pygltflib==1.16.5 pillow==12.3.0 segno playwright==1.63.0
+          python -m playwright install --with-deps chromium
       - name: Télécharger la structure PDB 3L2L
         run: curl -fsSL -o 3L2L.pdb https://files.rcsb.org/download/3L2L.pdb
-      - name: Construire les modèles GLB et USDZ
+      - name: Construire le modèle de la visite (GLB et USDZ)
         run: python build_models.py 3L2L.pdb site/models
-      - name: Ajouter le composant model-viewer 4.3.1
+      - name: Bibliothèques (model-viewer 4.3.1, MindAR 1.2.5, three.js 0.160.0)
         run: |
-          mkdir -p site/lib
+          W="$GITHUB_WORKSPACE/site/lib"
+          mkdir -p "$W/mindar" "$W/three/build" "$W/three/examples/jsm/loaders" "$W/three/examples/jsm/utils" "$W/three/examples/jsm/renderers"
           cd "$RUNNER_TEMP"
-          npm pack @google/model-viewer@4.3.1
-          tar xzf google-model-viewer-4.3.1.tgz
-          cp package/dist/model-viewer-umd.min.js package/LICENSE "$GITHUB_WORKSPACE/site/lib/"
+          npm pack @google/model-viewer@4.3.1 mind-ar@1.2.5 three@0.160.0
+          mkdir mv ma th
+          tar xzf google-model-viewer-4.3.1.tgz -C mv
+          tar xzf mind-ar-1.2.5.tgz -C ma
+          tar xzf three-0.160.0.tgz -C th
+          cp mv/package/dist/model-viewer-umd.min.js "$W/"
+          cp mv/package/LICENSE "$W/model-viewer-LICENSE.txt"
+          cp ma/package/dist/mindar-image-three.prod.js ma/package/dist/mindar-image.prod.js ma/package/dist/controller-*.js ma/package/dist/ui-*.js ma/package/LICENSE "$W/mindar/"
+          cp th/package/build/three.module.js "$W/three/build/"
+          cp th/package/examples/jsm/loaders/GLTFLoader.js "$W/three/examples/jsm/loaders/"
+          cp th/package/examples/jsm/utils/BufferGeometryUtils.js "$W/three/examples/jsm/utils/"
+          cp th/package/examples/jsm/renderers/CSS3DRenderer.js "$W/three/examples/jsm/renderers/"
+          cp th/package/LICENSE "$W/three/"
+      - name: Fiche imprimée et cible de suivi
+        run: |
+          python build_fiche.py 3L2L.pdb site https://michalaksvt.github.io/amylase-3d/
+          python compile_mind.py site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
