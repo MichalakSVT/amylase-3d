@@ -93,6 +93,7 @@ model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; backgrou
 .modele { font-size: .85rem; color: var(--muted); font-style: italic; margin-top: 8px; }
 .ar-info { font-size: .88rem; color: var(--muted); margin: 8px 0 0; }
 .ar-info.warn { color: #8a4b00; }
+.ar-info a { color: var(--violet-dark); font-weight: 600; }
 
 .nav { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .nav button {
@@ -101,6 +102,7 @@ model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; backgrou
 }
 .nav button.primary { background: var(--violet); color: #fff; border-color: var(--violet); }
 .nav button:disabled { opacity: .45; cursor: default; }
+.fiche-link { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--violet); background: var(--violet-soft); color: var(--violet-dark); font-weight: 600; text-decoration: none; }
 button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
 
 details.about { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
@@ -108,12 +110,38 @@ details.about summary { cursor: pointer; font-weight: 700; }
 details.about p { font-size: .9rem; }
 .small { font-size: .85rem; color: var(--muted); }
 
+
+/* Lecteur de la visite (dans model-viewer : reste visible pendant la réalité augmentée Android) */
+.player {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3;
+  background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.12);
+}
+.player .cap { margin: 0; font-size: .95rem; line-height: 1.3; color: var(--ink); }
+.player .cap strong { color: var(--violet-dark); }
+.pctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pctl button { width: 44px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: 700 1rem var(--font); cursor: pointer; }
+.pctl button.pp { width: 56px; background: var(--violet); color: #fff; border-color: var(--violet); }
+.speed { margin-left: auto; font-size: .85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.speed select { font: 600 .9rem var(--font); height: 36px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 0 6px; }
+.pctl button.ar-go { width: auto; padding: 0 12px; background: var(--violet-soft); border-color: var(--violet); color: var(--violet-dark); font-size: .9rem; }
+model-viewer[ar-status="session-started"] .ar-go { display: none; }
+.scale-note { bottom: auto; top: 8px; left: auto; right: 60px; display: none; }
+model-viewer[ar-status="session-started"] .player { bottom: 24px; }
+
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; }
   .stage { height: 58vh; }
   .steps button { font-size: .8rem; min-height: 44px; padding: 3px; }
   .steps button span { display: none; }
   .hotspot .lab { font-size: .74rem; padding: 1px 6px; }
+  .stage { height: 68vh; }
+  .player { padding: 6px 8px; gap: 4px; }
+  .player .cap { font-size: .86rem; }
+  .pctl { flex-wrap: nowrap; }
+  .pctl button { width: 40px; height: 38px; }
+  .pctl button.pp { width: 46px; }
+  .speed .lbl { display: none; }
 }
 @media (orientation: landscape) and (max-height: 520px) {
   .layout { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
@@ -155,8 +183,25 @@ details.about p { font-size: .9rem; }
       interpolation-decay="120" shadow-intensity="0.5" exposure="0.95" environment-image="neutral"
       loading="eager" reveal="auto"
       ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto">
-      <button id="ar-button" slot="ar-button" type="button">Observer dans mon environnement</button>
+      <span slot="ar-button" hidden></span>
       <div slot="progress-bar"></div>
+      <div class="player" id="player">
+        <p class="cap"><strong id="cap-title"></strong> <span id="cap-text"></span></p>
+        <div class="pctl">
+          <button type="button" id="p-prev" aria-label="Étape précédente" title="Étape précédente">⏮</button>
+          <button type="button" id="pp" class="pp" aria-label="Lancer la visite" title="Lancer la visite">▶</button>
+          <button type="button" id="p-next" aria-label="Étape suivante" title="Étape suivante">⏭</button>
+          <button type="button" id="ar-go" class="ar-go" hidden title="Observer dans mon environnement">Réalité augmentée</button>
+          <label class="speed"><span class="lbl">Vitesse</span>
+            <select id="speed">
+              <option value="0.5">× 0,5</option>
+              <option value="0.75">× 0,75</option>
+              <option value="1" selected>× 1</option>
+              <option value="1.5">× 1,5</option>
+            </select>
+          </label>
+        </div>
+      </div>
     </model-viewer>
 
     <div class="legend" id="legend" aria-label="Légende"></div>
@@ -174,8 +219,8 @@ details.about p { font-size: .9rem; }
     <section class="panel" id="panel" aria-live="polite"></section>
     <div class="nav">
       <button type="button" id="prev">← Précédent</button>
-      <button type="button" id="replay" hidden>↻ Rejouer</button>
       <button type="button" id="next" class="primary">Suivant →</button>
+      <a class="fiche-link" href="fiche.html">Réalité augmentée avec la fiche imprimée</a>
     </div>
     <p class="ar-info" id="ar-info"></p>
 
@@ -184,7 +229,7 @@ details.about p { font-size: .9rem; }
       <p><strong>Ce qui vient de l’expérience.</strong> L’amylase est représentée à partir des coordonnées atomiques de la structure PDB 3L2L (amylase pancréatique de porc, diffraction des rayons X, 2,11 Å ; 3 909 atomes, hors hydrogène). La surface montre le volume de la protéine ; le ruban coloré relie les 496 acides aminés dans l’ordre de la séquence.</p>
       <p><strong>Le site actif</strong> (en vert) correspond aux chaînes latérales des acides aminés catalytiques Asp197, Glu233 et Asp300 et des histidines His101, His201, His299 et His305, en contact avec le ligand dans la structure de l’enzyme liée à l’acarbose (PDB 1PPI).</p>
       <p><strong>Le substrat</strong> est une portion d’amylose de 7 glucoses. Les 5 glucoses d’un côté occupent les positions d’un fragment glucidique réellement observé dans le site de 3L2L (issu de la digestion du glycogène pendant la purification de l’enzyme ; sa ramification α-1,6 a été retirée). Les 2 autres sont placés sur les cycles observés dans 1PPI, après superposition des deux enzymes (écart moyen entre carbones α : 0,9 Å). <strong>L’arrivée, la coupure et le départ sont des animations simplifiées</strong> : une structure cristallographique est statique et ne montre pas la réaction elle-même.</p>
-      <p><strong>La cellulose</strong> est une chaîne régulière de 4 glucoses liés en β-1,4, construite à partir d’un β-glucose observé dans 1PPI (un glucose tous les 5,1 Å environ). Elle est placée devant l’enzyme pour comparer les formes ; aucune fixation n’est représentée.</p>
+      <p><strong>La cellulose</strong> est une chaîne régulière de 4 glucoses liés en β-1,4, construite à partir d’un β-glucose observé dans 1PPI (un glucose tous les 5,1 Å environ). Elle est placée à côté de l’enzyme pour comparer les formes ; aucune fixation n’est représentée.</p>
       <p class="small">L’eau et les ions (calcium, chlorure) ne sont pas représentés. La caméra n’est utilisée que pendant la réalité augmentée, par l’application de votre appareil ; aucune image n’est enregistrée ni envoyée.</p>
       <p class="small">Sources :<br>
         Brayer, G. D., et al. (2000). <em>Biochemistry, 39</em>(16), 4778–4791. https://doi.org/10.1021/bi9921182<br>
@@ -211,15 +256,15 @@ details.about p { font-size: .9rem; }
   var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var isAndroid = /Android/.test(ua);
 
-  // Repères (légendes, caméra, animation) calculés par build_models.py : models/meta.json
+  // Repères (légendes, caméra, frise de la visite) calculés par build_models.py : models/meta.json
   var META = null;
   var C = { violet: '#6a3db8', site: '#1bc689', sugar: '#f4a600', cel: '#2f6db5', cut: '#e31c2e', chain: '#2bb3d9', chainEnd: '#4b1f8f' };
 
   // ------------------------------------------------------------ contenu des étapes
-  // labels : [repère, texte, couleur, côté, moment] ; moment = 'always' (défaut), 'cut' (pendant la coupure) ou 'end' (fin de l'animation)
+  // labels : [repère, texte, couleur, côté, moment] ; moment = 'always' (défaut), 'cut' (pendant la coupure) ou 'end' (après l'animation de l'étape)
   var STEPS = [
     {
-      model: 'etape1-structure', view: 'all',
+      view: 'all',
       legend: [['grad', 'Chaîne d’acides aminés (du 1er au 496e)'], [C.violet, 'Surface de la protéine']],
       labels: [['proteine', 'Amylase : 1 chaîne de 496 acides aminés', C.violet], ['debut', 'Acide aminé n° 1', C.chain], ['fin', 'Acide aminé n° 496', C.chainEnd, 'left']],
       html:
@@ -230,7 +275,7 @@ details.about p { font-size: .9rem; }
         '<div class="question"><strong>À vous :</strong> repérez le début et la fin de la chaîne. Sont-ils proches dans la séquence ? dans l’espace ?</div>'
     },
     {
-      model: 'etape2-site', view: 'site',
+      view: 'site',
       legend: [[C.violet, 'Amylase'], [C.site, 'Site actif']],
       labels: [['site', 'Site actif (au fond du sillon)', C.site], ['asp197', 'Asp 197', C.site], ['glu233', 'Glu 233', C.site], ['asp300', 'Asp 300', C.site, 'left']],
       html:
@@ -243,7 +288,7 @@ details.about p { font-size: .9rem; }
         '<div class="question"><strong>À vous :</strong> pourquoi le remplacement d’un seul acide aminé du site actif peut-il rendre l’enzyme inactive ?</div>'
     },
     {
-      model: 'etape3-fixation', view: 'complex', play: [0, 'bound'],
+      view: 'complex',
       legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.sugar, 'Substrat : portion d’amidon']],
       labels: [['substrat', 'Complexe enzyme-substrat', C.sugar, null, 'end']],
       html:
@@ -256,7 +301,7 @@ details.about p { font-size: .9rem; }
         '<div class="question"><strong>À vous :</strong> que signifie « forme complémentaire » ? Faites tourner le modèle pour observer comment la chaîne s’ajuste au sillon.</div>'
     },
     {
-      model: 'etape3-fixation', view: 'complex', play: ['bound', 'cut_end'],
+      view: 'complex',
       legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.cut, 'Liaison coupée'], [C.sugar, 'Substrat puis produits']],
       labels: [['liaison', 'Liaison α-1,4 coupée (hydrolyse)', C.cut, null, 'cut'], ['produitB', 'Maltose (2 glucoses)', C.sugar, null, 'end'], ['produitA', 'Chaîne d’amidon raccourcie', C.sugar, 'left', 'end'], ['site', 'Enzyme intacte, de nouveau libre', C.site, null, 'end']],
       html:
@@ -270,7 +315,7 @@ details.about p { font-size: .9rem; }
         '<div class="question"><strong>À vous :</strong> pourquoi une petite quantité d’amylase suffit-elle à hydrolyser une grande quantité d’amidon ?</div>'
     },
     {
-      model: 'etape5-cellulose', view: 'cellulose',
+      view: 'cellulose',
       legend: [[C.violet, 'Amylase'], [C.site, 'Site actif'], [C.sugar, 'Amidon'], [C.cel, 'Cellulose']],
       labels: [['amidon', 'Amidon : glucoses liés en α-1,4', C.sugar], ['cellulose', 'Cellulose : glucoses liés en β-1,4', C.cel, 'left']],
       html:
@@ -285,27 +330,39 @@ details.about p { font-size: .9rem; }
     }
   ];
 
-  // ------------------------------------------------------------ chargement des modèles
-  var current = -1, loaded = false, blobUrls = {}, pending = null, stopAt = null;
+  // ------------------------------------------------------------ frise de la visite
+  // model-viewer divise le temps demandé par la vitesse : on compense pour se placer au bon moment de la frise
+  function setTime(t) { mv.currentTime = t / (mv.timeScale || 1); }
+  function seg(i) { return META.anim.segments[String(i + 1)]; }
+  function stepAt(t) { for (var i = 0; i < 5; i++) { var s = seg(i); if (t >= s[0] && t < s[1]) return i; } return 4; }
+  // temps où s'arrête une étape consultée seule (étapes animées : fin de l'animation ; sinon début de l'étape)
+  function stopTime(i) {
+    if (i === 2) return META.anim.bound + 1;
+    if (i === 3) return META.anim.gone + 1;
+    return seg(i)[0] + 1;
+  }
+  function phaseAt(i, t) {
+    if (i === 2) return t >= META.anim.bound ? 'end' : 'start';
+    if (i === 3) return (t >= META.anim.cut[0] && t < META.anim.cut[1]) ? 'cut' : (t >= META.anim.gone ? 'end' : 'none');
+    return 'end';
+  }
 
-  function setModel(name) {
-    if (mv.dataset.model === name && loaded) { onModelReady(); return; }
-    mv.dataset.model = name;
+  // ------------------------------------------------------------ chargement du modèle
+  var current = -1, loaded = false, playing = false, stopAt = null, lastPhase = '';
+  function loadModel() {
     $('loading').hidden = false;
     if (!embedModels) {
-      mv.setAttribute('ios-src', 'models/' + name + '.usdz');
-      mv.src = 'models/' + name + '.glb';
+      mv.setAttribute('ios-src', 'models/visite.usdz');
+      mv.src = 'models/visite.glb';
       return;
     }
-    if (blobUrls[name]) { mv.src = blobUrls[name]; return; }
     var s = document.createElement('script');
-    s.src = 'models/' + name + '.glb.js';
+    s.src = 'models/visite.glb.js';
     s.onload = function () {
-      var b64 = window.__GLB[name], bin = atob(b64), bytes = new Uint8Array(bin.length);
+      var b64 = window.__GLB.visite, bin = atob(b64), bytes = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      blobUrls[name] = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
-      delete window.__GLB[name];
-      mv.src = blobUrls[name];
+      delete window.__GLB.visite;
+      mv.src = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
     };
     s.onerror = showLoadError;
     document.head.appendChild(s);
@@ -314,6 +371,15 @@ details.about p { font-size: .9rem; }
     $('loading').hidden = true;
     $('error').textContent = 'Le modèle n’a pas pu être chargé. Vérifiez la connexion Internet, puis rechargez la page.';
     $('error').hidden = false;
+  }
+  // Les panneaux de texte intégrés au modèle servent aux applications de réalité augmentée (Android, iPhone) ;
+  // dans la page, le texte est affiché par le lecteur, donc on les masque.
+  function hidePanels() {
+    try {
+      mv.model.materials.forEach(function (m) {
+        if (/^panneau/.test(m.name)) { m.setAlphaMode('BLEND'); m.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, 0]); }
+      });
+    } catch (e) {}
   }
 
   // ------------------------------------------------------------ caméra
@@ -327,7 +393,7 @@ details.about p { font-size: .9rem; }
     mv.fieldOfView = 'auto';
   }
 
-  // ------------------------------------------------------------ légendes et légende des couleurs
+  // ------------------------------------------------------------ légendes
   var hotspotEls = [];
   function clearLabels() { hotspotEls.forEach(function (el) { el.remove(); }); hotspotEls = []; }
   function showLabels(step, phase) {
@@ -354,31 +420,8 @@ details.about p { font-size: .9rem; }
     });
   }
 
-  // ------------------------------------------------------------ animation (étapes 3 et 4)
-  function tval(v) { return typeof v === 'number' ? v : META.anim[v]; }
-  function runSegment(step) {
-    var a = tval(step.play[0]), b = tval(step.play[1]);
-    mv.animationName = META.anim.name;
-    mv.pause(); mv.currentTime = a;
-    showLabels(step, a > 0 ? 'cut' : 'start');
-    stopAt = { t: b, step: step };
-    mv.play();
-    requestAnimationFrame(watch);
-  }
-  function watch() {
-    if (!stopAt) return;
-    var cut = stopAt.step.play[0] !== 0 && mv.currentTime > META.anim.bound + 1.6;
-    if (cut && !stopAt.cutDone) { stopAt.cutDone = true; showLabels(stopAt.step, 'none'); }
-    if (mv.currentTime >= stopAt.t - 0.02) {
-      mv.pause(); mv.currentTime = stopAt.t;
-      showLabels(stopAt.step, 'end'); stopAt = null; return;
-    }
-    requestAnimationFrame(watch);
-  }
-
-  // ------------------------------------------------------------ navigation
-  function goTo(i) {
-    if (i < 0 || i >= STEPS.length) return;
+  // ------------------------------------------------------------ affichage d'une étape (texte, légende, légendes 3D)
+  function showStep(i, moveCamera) {
     current = i;
     var step = STEPS[i];
     document.querySelectorAll('.steps button').forEach(function (b) {
@@ -387,24 +430,54 @@ details.about p { font-size: .9rem; }
     $('panel').innerHTML = step.html;
     $('prev').disabled = i === 0;
     $('next').disabled = i === STEPS.length - 1;
-    $('replay').hidden = !step.play;
+    var cap = META.captions[String(i + 1)];
+    $('cap-title').textContent = cap[0];
+    $('cap-text').textContent = cap[1];
     setLegend(step);
-    clearLabels();
-    stopAt = null;
+    lastPhase = '';
+    if (moveCamera && !inAR) setView(step.view);
     try { history.replaceState(null, '', '#etape' + (i + 1)); } catch (e) {}
-    pending = step;
-    setModel(step.model);
   }
-  function onModelReady() {
+
+  // ------------------------------------------------------------ lecture
+  function setPlaying(p) {
+    playing = p;
+    $('pp').textContent = p ? '❚❚' : '▶';
+    $('pp').setAttribute('aria-label', p ? 'Mettre en pause' : 'Lancer la visite');
+    $('pp').title = p ? 'Pause' : 'Lancer la visite';
+    if (p) { stopAt = null; mv.play(); } else { mv.pause(); }
+  }
+  // Consulter une étape : on s'y place ; les étapes animées se jouent puis s'arrêtent, sauf si la visite est en cours.
+  function goTo(i) {
+    if (!loaded || i < 0 || i >= STEPS.length) return;
+    setTime(seg(i)[0] + 0.05);
+    showStep(i, true);
+    if (playing) return;
+    stopAt = stopTime(i);
+    if (i === 2 || i === 3) mv.play(); else { setTime(stopAt); stopAt = null; mv.pause(); }
+  }
+  function tick() {
+    if (!loaded || !META) return;
+    var t = mv.currentTime;
+    if (stopAt !== null && t >= stopAt) { mv.pause(); setTime(stopAt); stopAt = null; t = mv.currentTime; }
+    var i = stepAt(t);
+    if (i !== current) showStep(i, !inAR && playing);
+    var ph = phaseAt(i, t);
+    if (ph !== lastPhase) { lastPhase = ph; showLabels(STEPS[i], ph); }
+  }
+  setInterval(tick, 150);     // minuterie (et non requestAnimationFrame) : continue pendant la réalité augmentée
+
+  mv.addEventListener('load', function () {
+    loaded = true;
     $('loading').hidden = true; $('error').hidden = true;
-    var step = pending; if (!step) return;
-    pending = null;
-    setView(step.view);
-    if (step.play) runSegment(step);
-    else showLabels(step, 'end');
-    updateAr();
-  }
-  mv.addEventListener('load', function () { loaded = true; onModelReady(); });
+    hidePanels();
+    mv.animationName = META.anim.name;
+    mv.timeScale = +$('speed').value;
+    var m = /^#etape([1-5])$/.exec(location.hash);
+    // l'animation n'est prête qu'après une image : on attend avant de se placer dans la frise
+    mv.play(); mv.pause();
+    setTimeout(function () { goTo(m ? +m[1] - 1 : 0); updateAr(); }, 300);
+  });
   mv.addEventListener('progress', function (e) {
     $('loading-text').textContent = 'Chargement du modèle moléculaire… ' + Math.round((e.detail.totalProgress || 0) * 100) + ' %';
   });
@@ -413,55 +486,64 @@ details.about p { font-size: .9rem; }
   document.querySelectorAll('.steps button').forEach(function (b) { b.addEventListener('click', function () { goTo(+b.dataset.step); }); });
   $('prev').addEventListener('click', function () { goTo(current - 1); });
   $('next').addEventListener('click', function () { goTo(current + 1); });
-  $('replay').addEventListener('click', function () { var s = STEPS[current]; setView(s.view); runSegment(s); });
+  $('p-prev').addEventListener('click', function () { goTo(current > 0 ? current - 1 : 4); });
+  $('p-next').addEventListener('click', function () { goTo(current < 4 ? current + 1 : 0); });
+  $('pp').addEventListener('click', function () { setPlaying(!playing); });
+  // les gestes sur le lecteur ne doivent pas faire tourner le modèle
+  ['pointerdown', 'touchstart', 'mousedown', 'wheel'].forEach(function (ev) {
+    $('player').addEventListener(ev, function (e) { e.stopPropagation(); }, { passive: true });
+  });
+  $('ar-go').addEventListener('click', function () { mv.activateAR(); });
+  $('speed').addEventListener('change', function () { mv.timeScale = +this.value; });
   $('btn-reset').addEventListener('click', function () { setView(STEPS[current].view); });
   function zoom(f) { var o = mv.getCameraOrbit(); mv.cameraOrbit = o.theta + 'rad ' + o.phi + 'rad ' + (o.radius * f) + 'm'; }
   $('zoom-in').addEventListener('click', function () { zoom(0.8); });
   $('zoom-out').addEventListener('click', function () { zoom(1.25); });
 
   // ------------------------------------------------------------ réalité augmentée
+  var inAR = false;
   function updateAr() {
     var info = $('ar-info');
     if (!loaded) return;
+    var fiche = ' Sans compatibilité (tablettes Lenovo, par exemple) : utilisez la <a href="fiche.html">réalité augmentée avec la fiche imprimée</a>.';
+    $('ar-go').hidden = !mv.canActivateAR;
     if (mv.canActivateAR) {
       info.className = 'ar-info';
-      info.textContent = 'Réalité augmentée : touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table. Le modèle de cette étape s’y pose' + (STEPS[current].play ? ', avec l’animation en boucle.' : '.');
+      info.innerHTML = 'Réalité augmentée sur la table : touchez « Réalité augmentée », autorisez la caméra, puis visez une table. La visite guidée se lance, avec les textes, la pause et la vitesse à l’écran.' + (isIOS ? ' Sur iPhone et iPad, la visite défile seule, avec ses textes (pas de pause) ; pour la pause, utilisez la <a href="fiche.html">fiche imprimée</a>.' : '');
       return;
     }
     info.className = 'ar-info warn';
-    info.textContent = (isLocalFile || embedModels) ? 'La réalité augmentée nécessite la version en ligne du site.'
-      : isIOS ? 'Réalité augmentée indisponible dans ce navigateur : ouvrez le lien dans Safari.'
-      : isAndroid ? 'Réalité augmentée indisponible : ouvrez le lien dans Chrome et vérifiez que « Services Google Play pour la RA » est installé.'
-      : 'Réalité augmentée disponible sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari).';
+    info.innerHTML = ((isLocalFile || embedModels) ? 'La réalité augmentée nécessite la version en ligne du site.'
+      : (isIOS || isAndroid) ? 'Cet appareil ne permet pas la réalité augmentée « sur la table ».'
+      : 'Réalité augmentée disponible sur téléphone ou tablette.') + (isLocalFile ? '' : fiche);
   }
   mv.addEventListener('ar-status', function (e) {
-    if (e.detail.status === 'failed') {
+    var st = e.detail.status;
+    if (st === 'session-started') { inAR = true; if (!playing) setPlaying(true); }
+    if (st === 'not-presenting') { inAR = false; }
+    if (st === 'failed') {
+      inAR = false;
       $('ar-info').className = 'ar-info warn';
-      $('ar-info').textContent = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible). La vue 3D reste disponible.';
+      $('ar-info').innerHTML = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible). Essayez la <a href="fiche.html">réalité augmentée avec la fiche imprimée</a>.';
     }
   });
 
   // ------------------------------------------------------------ démarrage
-  function start() {
-    if (!META) { showLoadError(); return; }
-    var m = /^#etape([1-5])$/.exec(location.hash);
-    goTo(m ? +m[1] - 1 : 0);
-  }
-  function loadMeta() {
-    if (embedModels) {                      // ouverture locale : repères intégrés (meta.js)
+  function loadMeta(next) {
+    if (embedModels) {
       var s = document.createElement('script');
       s.src = 'models/meta.js';
-      s.onload = function () { META = window.__META; start(); };
+      s.onload = function () { META = window.__META; next(); };
       s.onerror = showLoadError;
       document.head.appendChild(s);
       return;
     }
     fetch('models/meta.json').then(function (r) { return r.json(); })
-      .then(function (m) { META = m; }).catch(function () {}).then(start);
+      .then(function (m) { META = m; next(); }).catch(showLoadError);
   }
   var tries = 0;
   (function waitComponent() {
-    if (window.customElements && customElements.get('model-viewer')) { loadMeta(); return; }
+    if (window.customElements && customElements.get('model-viewer')) { loadMeta(loadModel); return; }
     if (++tries > 40) {
       $('loading').hidden = true;
       $('error').textContent = 'Le composant 3D n’a pas pu démarrer. Vérifiez la connexion Internet, ou ouvrez le lien avec un navigateur à jour (Chrome, Firefox, Safari, Edge).';
