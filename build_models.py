@@ -269,71 +269,133 @@ _ab -= (_ab @ open_dir) * open_dir; _ab /= np.linalg.norm(_ab)
 OFF_A = (open_dir * 22 - _ab * 16) * SCALE              # chaîne raccourcie
 OFF_B = (open_dir * 22 + _ab * 16) * SCALE              # maltose
 
-# ---------------------------------------------------------------- description des étapes
-# chaque partie : (nom, maillage, couleur, opacité)
-def step_parts(step):
-    P = []
-    if step == 'etape1-structure':
-        P.append(('surface', surf_all, COL['protein'], 0.22))
-        for i, sm in enumerate(seg_meshes):
-            col = tuple(TUBE_FROM + (TUBE_TO - TUBE_FROM) * i / (NSEG - 1))
-            P.append(('chaine_%d' % (i + 1), tfm(sm), col, 1.0))
-    else:
-        P.append(('amylase', surf_rest, COL['protein'], 1.0))
-        P.append(('site_actif', surf_site, COL['site'], 1.0))
-    if step == 'etape3-fixation':
-        # géométrie centrée sur le centre du groupe : la translation animée la replace
-        for nm, part in (('pieceA', units_minus), ('pieceB', units_plus)):
-            for j, (mm, col) in enumerate(chain_meshes(part, COL['glc_a'], COL['glc_b'])):
-                mm = tfm(mm); mm.vertices = mm.vertices - GROUP_C[nm]
-                P.append((f'{nm}_{j}', mm, col, 1.0))
-        mk = _ico.copy(); mk.vertices = mk.vertices * 1.6 * SCALE
-        P.append(('liaison', mk, COL['cut'], 1.0))
-    if step == 'etape5-cellulose':
-        for j, (mm, col) in enumerate(chain_meshes(amy_free, COL['glc_a'], COL['glc_b'])):
-            P.append((f'amidon_{j}', tfm(mm), col, 1.0))
-        for j, (mm, col) in enumerate(chain_meshes(cel_free, COL['cel_a'], COL['cel_b'])):
-            P.append((f'cellulose_{j}', tfm(mm), col, 1.0))
-    return P
+# ---------------------------------------------------------------- visite guidée : une seule animation, 5 étapes
+# Segments (secondes, vitesse 1) : chaque étape occupe un intervalle de la frise.
+SEG = {1: (0.0, 12.0), 2: (12.0, 22.0), 3: (22.0, 34.0), 4: (34.0, 46.0), 5: (46.0, 58.0)}
+END = 58.0
+T_BOUND, T_CUT0, T_CUT1, T_GONE = 27.0, 34.0, 35.8, 39.0     # fixation terminée, marqueur de coupure, produits partis
+CAPTIONS = {
+    1: ("1/5 · Structure", "L’amylase est une protéine : une chaîne de 496 acides aminés repliée en une forme 3D précise."),
+    2: ("2/5 · Site actif (vert)", "Il est formé d’acides aminés éloignés dans la séquence mais rapprochés par le repliement."),
+    3: ("3/5 · Fixation du substrat", "L’amidon (substrat) se fixe dans le site actif, de forme complémentaire : c’est le complexe enzyme-substrat."),
+    4: ("4/5 · Catalyse : hydrolyse", "Une liaison entre deux glucoses est coupée : maltose et chaîne raccourcie sont libérés, l’enzyme est intacte."),
+    5: ("5/5 · Et la cellulose ?", "Amidon (liaisons α) et cellulose (liaisons β) : la cellulose peut-elle se fixer dans ce site actif ?"),
+}
+EPS = 0.02
 
-# animation (étape 3) : groupes et images clés (secondes)
+def vis_keys(intervals):
+    """Visibilité (échelle 0 ou 1) avec bascules quasi instantanées."""
+    keys = [(0.0, 0.0)]
+    for a, b in intervals:
+        keys += [(max(a - EPS, 0.0), 0.0), (a, 1.0), (b - EPS, 1.0), (b, 0.0)]
+    keys.append((END, 0.0))
+    d = {}
+    for t, v in keys:                       # à temps égal, la dernière valeur l'emporte
+        d[round(t, 4)] = v
+    return sorted(d.items())
+
+# panneaux de texte (pour la réalité augmentée des applications natives)
+from PIL import Image, ImageDraw, ImageFont
+FONT_B = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+FONT_R = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+def wrap(draw, text, font, width):
+    lines, cur = [], ''
+    for w in text.split():
+        t = (cur + ' ' + w).strip()
+        if draw.textlength(t, font=font) <= width: cur = t
+        else: lines.append(cur); cur = w
+    return lines + [cur]
+def panel_image(k):
+    W, H = 1600, 420
+    img = Image.new('RGB', (W, H), (255, 255, 255)); d = ImageDraw.Draw(img)
+    d.rounded_rectangle((6, 6, W - 7, H - 7), radius=36, outline=(106, 61, 184), width=12)
+    fb, fr = ImageFont.truetype(FONT_B, 66), ImageFont.truetype(FONT_R, 58)
+    title, text = CAPTIONS[k]
+    d.text((60, 44), title, font=fb, fill=(90, 51, 158))
+    y = 140
+    for line in wrap(d, text, fr, W - 120)[:3]:
+        d.text((60, y), line, font=fr, fill=(31, 27, 43)); y += 78
+    return img
+top_y = max(float(surf_all.vertices[:, 1].max()), 0)
+PW, PH = 0.42, 0.42 * 420 / 1600
+def panel_mesh(back=False):
+    v = np.array([[-PW / 2, 0, 0], [PW / 2, 0, 0], [PW / 2, PH, 0], [-PW / 2, PH, 0]])
+    uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1.0]])
+    f = np.array([[0, 1, 2], [0, 2, 3]])
+    if back:   # face arrière : même texte, lisible de l'autre côté
+        v[:, 0] *= -1; v[:, 2] -= 0.002
+    v[:, 1] += top_y + 0.03
+    return trimesh.Trimesh(v, f, process=False), uv
+
+# toutes les parties de la visite : (nom, maillage, couleur, opacité, texture, groupe)
+PARTS = [('surface_transparente', surf_all, COL['protein'], 0.22, None, 'trans')]
+for i, sm in enumerate(seg_meshes):
+    PARTS.append(('chaine_%d' % (i + 1), tfm(sm), tuple(TUBE_FROM + (TUBE_TO - TUBE_FROM) * i / (NSEG - 1)), 1.0, None, 'tube'))
+PARTS += [('amylase', surf_rest, COL['protein'], 1.0, None, 'opaque'), ('site_actif', surf_site, COL['site'], 1.0, None, 'opaque')]
 A_c0 = np.array([p for uu in units_minus for p in uu.values()]).mean(0)
 B_c0 = np.array([p for uu in units_plus for p in uu.values()]).mean(0)
 GROUP_C = {'pieceA': tf(A_c0), 'pieceB': tf(B_c0), 'liaison': tf(cut_pos)}
-ANIM_T = [0, 1.5, 3.0, 5.0, 5.4, 5.8, 6.4, 6.6, 8.0, 9.4, 9.6, 9.7, 10.0, 10.5]
-def anim_tracks():
-    z = np.zeros(3); f = lambda a: [tuple(x) for x in a]
-    ease_in = [OFF_IN, OFF_IN * 0.35, z]
-    trA = ease_in + [z, z, z, z, z, OFF_A * 0.6, OFF_A, OFF_A, OFF_IN, OFF_IN, OFF_IN]
-    trB = ease_in + [z, z, z, z, z, OFF_B * 0.6, OFF_B, OFF_B, OFF_IN, OFF_IN, OFF_IN]
-    one, zero = (1, 1, 1), (0, 0, 0)
-    scA = [one] * 9 + [one, zero, zero, one, one]
-    scM = [zero, zero, zero, zero, (1.3,) * 3, one, one, zero, zero, zero, zero, zero, zero, zero]
-    add = lambda tr, g: [tuple(np.asarray(x) + GROUP_C[g]) for x in tr]
-    return {'pieceA': (add(trA, 'pieceA'), scA), 'pieceB': (add(trB, 'pieceB'), scA),
-            'liaison': (add([z] * len(ANIM_T), 'liaison'), scM)}
+for nm, part in (('pieceA', units_minus), ('pieceB', units_plus)):
+    for j, (mm, col) in enumerate(chain_meshes(part, COL['glc_a'], COL['glc_b'])):
+        mm = tfm(mm); mm.vertices = mm.vertices - GROUP_C[nm]
+        PARTS.append((f'{nm}_{j}', mm, col, 1.0, None, nm))
+mk = _ico.copy(); mk.vertices = mk.vertices * 1.6 * SCALE
+PARTS.append(('liaison', mk, COL['cut'], 1.0, None, 'liaison'))
+for j, (mm, col) in enumerate(chain_meshes(amy_free, COL['glc_a'], COL['glc_b'])):
+    PARTS.append((f'amidon_{j}', tfm(mm), col, 1.0, None, 'libres'))
+for j, (mm, col) in enumerate(chain_meshes(cel_free, COL['cel_a'], COL['cel_b'])):
+    PARTS.append((f'cellulose_{j}', tfm(mm), col, 1.0, None, 'libres'))
+for k in range(1, 6):
+    img = panel_image(k); img.save(OUT / f'panneau_{k}.png')
+    for side in (0, 1):
+        pm, uv = panel_mesh(back=bool(side))
+        PARTS.append((f'panneau_{k}_{side}', pm, (1, 1, 1), 1.0, (uv, img, f'panneau_{k}.png'), f'panneau_{k}'))
 
-# ---------------------------------------------------------------- export GLB
+def tracks_for(group):
+    """(clés de translation, clés d'échelle) pour un groupe ; translation None = fixe."""
+    S = SEG
+    if group == 'trans' or group == 'tube':
+        return None, vis_keys([S[1]])
+    if group == 'opaque':
+        return None, vis_keys([(S[2][0], END)])
+    if group == 'libres':
+        return None, vis_keys([S[5]])
+    if group.startswith('panneau_'):
+        return None, vis_keys([S[int(group[-1])]])
+    if group in ('pieceA', 'pieceB'):
+        off = OFF_A if group == 'pieceA' else OFF_B
+        c = GROUP_C[group]
+        tr = [(0.0, OFF_IN), (S[3][0], OFF_IN), (S[3][0] + 2.5, OFF_IN * 0.35), (T_BOUND, 0 * OFF_IN), (T_CUT1, 0 * OFF_IN),
+              (T_CUT1 + 1.7, off * 0.6), (T_GONE, off), (END, off)]
+        return [(t, tuple(np.asarray(v) + c)) for t, v in tr], vis_keys([(S[3][0], S[4][1])])
+    if group == 'liaison':
+        sc = [(0.0, 0.0), (T_CUT0, 0.0), (T_CUT0 + 0.4, 1.3), (T_CUT0 + 0.8, 1.0), (T_CUT1 - 0.2, 1.0), (T_CUT1, 0.0), (END, 0.0)]
+        return [(0.0, tuple(GROUP_C['liaison'])), (END, tuple(GROUP_C['liaison']))], sc
+    raise ValueError(group)
+
+# ---------------------------------------------------------------- export GLB animé
 import pygltflib
-def material(rgb, name, alpha):
-    return trimesh.visual.material.PBRMaterial(name=name, baseColorFactor=list(rgb) + [alpha], metallicFactor=0.0,
-                                               roughnessFactor=0.75, alphaMode='BLEND' if alpha < 1 else 'OPAQUE')
+def material(rgb, name, alpha, tex=None):
+    kw = dict(name=name, baseColorFactor=list(rgb) + [alpha], metallicFactor=0.0, roughnessFactor=0.75,
+              alphaMode='BLEND' if alpha < 1 else 'OPAQUE')
+    if tex is not None:
+        kw['baseColorTexture'] = tex
+        kw['emissiveFactor'] = [0.0, 0.0, 0.0]
+    return trimesh.visual.material.PBRMaterial(**kw)
 
-def group_of(name):
-    return name.split('_')[0] if name.split('_')[0] in ('pieceA', 'pieceB') else name
-
-def export_glb(step, path):
-    parts = step_parts(step)
+def export_glb(path):
     scene = trimesh.Scene()
-    for nm, mm, col, al in parts:
-        mm = mm.copy(); mm.visual = trimesh.visual.TextureVisuals(material=material(col, nm, al))
+    for nm, mm, col, al, tex, grp in PARTS:
+        mm = mm.copy()
+        if tex is not None:
+            uv, img, _ = tex
+            mm.visual = trimesh.visual.TextureVisuals(uv=uv, material=material(col, nm, al, img))
+        else:
+            mm.visual = trimesh.visual.TextureVisuals(material=material(col, nm, al))
         scene.add_geometry(mm, node_name=nm, geom_name=nm)
     scene.export(path)
-    if step != 'etape3-fixation':
-        return
     g = pygltflib.GLTF2().load(str(path))
     blob = bytearray(g.binary_blob())
-    tracks = anim_tracks()
     def add_acc(arr, typ):
         arr = np.asarray(arr, np.float32); off = len(blob)
         while off % 4: blob.append(0); off += 1
@@ -343,73 +405,82 @@ def export_glb(step, path):
         if typ == 'SCALAR':
             acc.min, acc.max = [float(arr.min())], [float(arr.max())]
         g.accessors.append(acc); return len(g.accessors) - 1
-    t_acc = add_acc(ANIM_T, 'SCALAR')
-    anim = pygltflib.Animation(name='fixation-hydrolyse', samplers=[], channels=[])
+    grp_of = {p[0]: p[5] for p in PARTS}
+    anim = pygltflib.Animation(name='visite', samplers=[], channels=[])
     for ni, node in enumerate(g.nodes):
-        grp = group_of(node.name or '')
-        if grp not in tracks:
+        grp = grp_of.get(node.name or '')
+        if grp is None:
             continue
         node.matrix = None
-        tr, sc = tracks[grp]
-        for path_, data in (('translation', tr), ('scale', sc)):
-            anim.samplers.append(pygltflib.AnimationSampler(input=t_acc, output=add_acc(data, 'VEC3'), interpolation='LINEAR'))
-            anim.channels.append(pygltflib.AnimationChannel(sampler=len(anim.samplers) - 1,
-                                                            target=pygltflib.AnimationChannelTarget(node=ni, path=path_)))
+        tr, sc = tracks_for(grp)
+        chans = [('scale', [t for t, _ in sc], [(v, v, v) for _, v in sc])]
+        if tr is not None:
+            chans.append(('translation', [t for t, _ in tr], [v for _, v in tr]))
+        for path_, times, vals in chans:
+            anim.samplers.append(pygltflib.AnimationSampler(input=add_acc(times, 'SCALAR'), output=add_acc(vals, 'VEC3'), interpolation='LINEAR'))
+            anim.channels.append(pygltflib.AnimationChannel(sampler=len(anim.samplers) - 1, target=pygltflib.AnimationChannelTarget(node=ni, path=path_)))
     g.animations = [anim]
     g.buffers[0].byteLength = len(blob)
     g.set_binary_blob(bytes(blob))
     g.save_binary(str(path))
 
-# ---------------------------------------------------------------- export USDZ
+# ---------------------------------------------------------------- export USDZ animé (Quick Look)
 from pxr import Usd, UsdGeom, UsdShade, Sdf, Gf, Vt, UsdUtils
 FPS = 24
-def export_usdz(step, path):
+def export_usdz(path):
     tmp = path.with_suffix('.usdc')
     stage = Usd.Stage.CreateNew(str(tmp))
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y); UsdGeom.SetStageMetersPerUnit(stage, 1.0)
     root = UsdGeom.Xform.Define(stage, '/Amylase'); stage.SetDefaultPrim(root.GetPrim())
-    animated = step == 'etape3-fixation'
-    if animated:
-        stage.SetTimeCodesPerSecond(FPS); stage.SetStartTimeCode(0); stage.SetEndTimeCode(ANIM_T[-1] * FPS)
-        tracks = anim_tracks(); groups = {}
-        for grp, (tr, sc) in tracks.items():
-            x = UsdGeom.Xform.Define(stage, f'/Amylase/{grp}')
-            top, sop = x.AddTranslateOp(), x.AddScaleOp()
-            for t, a, b in zip(ANIM_T, tr, sc):
-                top.Set(Gf.Vec3d(*a), t * FPS); sop.Set(Gf.Vec3f(*b), t * FPS)
-            groups[grp] = f'/Amylase/{grp}'
-    for nm, mm, col, al in step_parts(step):
-        parent = '/Amylase'
-        if animated and group_of(nm) in ('pieceA', 'pieceB', 'liaison'):
-            parent = groups[group_of(nm)]
+    stage.SetTimeCodesPerSecond(FPS); stage.SetStartTimeCode(0); stage.SetEndTimeCode(END * FPS)
+    for nm, mm, col, al, tex, grp in PARTS:
+        x = UsdGeom.Xform.Define(stage, f'/Amylase/{nm}_x')
+        tr, sc = tracks_for(grp)
+        if tr is not None:
+            top = x.AddTranslateOp()
+            for t, v in tr: top.Set(Gf.Vec3d(*v), t * FPS)
+        sop = x.AddScaleOp()
+        for t, v in sc: sop.Set(Gf.Vec3f(v, v, v), t * FPS)
         mat = UsdShade.Material.Define(stage, f'/Amylase/Mat_{nm}')
         sh = UsdShade.Shader.Define(stage, f'/Amylase/Mat_{nm}/Surface')
         sh.CreateIdAttr('UsdPreviewSurface')
-        sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*col))
         sh.CreateInput('roughness', Sdf.ValueTypeNames.Float).Set(0.75)
         sh.CreateInput('metallic', Sdf.ValueTypeNames.Float).Set(0.0)
+        if tex is not None:
+            uvr = UsdShade.Shader.Define(stage, f'/Amylase/Mat_{nm}/uv')
+            uvr.CreateIdAttr('UsdPrimvarReader_float2')
+            uvr.CreateInput('varname', Sdf.ValueTypeNames.Token).Set('st')
+            tx = UsdShade.Shader.Define(stage, f'/Amylase/Mat_{nm}/tex')
+            tx.CreateIdAttr('UsdUVTexture')
+            tx.CreateInput('file', Sdf.ValueTypeNames.Asset).Set(tex[2])
+            tx.CreateInput('st', Sdf.ValueTypeNames.Float2).ConnectToSource(uvr.ConnectableAPI(), 'result')
+            sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).ConnectToSource(tx.ConnectableAPI(), 'rgb')
+        else:
+            sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*col))
         if al < 1:
             sh.CreateInput('opacity', Sdf.ValueTypeNames.Float).Set(float(al))
         mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), 'surface')
-        gm = UsdGeom.Mesh.Define(stage, f'{parent}/{nm}')
+        gm = UsdGeom.Mesh.Define(stage, f'/Amylase/{nm}_x/{nm}')
         gm.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(mm.vertices.astype(np.float32)))
         gm.CreateFaceVertexCountsAttr(Vt.IntArray([3] * len(mm.faces)))
         gm.CreateFaceVertexIndicesAttr(Vt.IntArray(mm.faces.flatten().tolist()))
-        gm.CreateNormalsAttr(Vt.Vec3fArray.FromNumpy(mm.vertex_normals.astype(np.float32)))
-        gm.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
         gm.CreateSubdivisionSchemeAttr('none')
+        if tex is not None:
+            pv = UsdGeom.PrimvarsAPI(gm).CreatePrimvar('st', Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex)
+            pv.Set(Vt.Vec2fArray.FromNumpy(tex[0].astype(np.float32)))
+            gm.CreateDoubleSidedAttr(False)
+        else:
+            gm.CreateNormalsAttr(Vt.Vec3fArray.FromNumpy(mm.vertex_normals.astype(np.float32)))
+            gm.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
         UsdShade.MaterialBindingAPI.Apply(gm.GetPrim()).Bind(mat)
     stage.GetRootLayer().Save()
     UsdUtils.CreateNewARKitUsdzPackage(Sdf.AssetPath(str(tmp)), str(path))
     tmp.unlink()
 
-STEPS = ['etape1-structure', 'etape2-site', 'etape3-fixation', 'etape5-cellulose']
-for stp in STEPS:
-    export_glb(stp, OUT / f'{stp}.glb')
-    export_usdz(stp, OUT / f'{stp}.usdz')
-    # copie intégrée pour l'ouverture de la page depuis un fichier local
-    (OUT / f'{stp}.glb.js').write_text('(window.__GLB=window.__GLB||{})["%s"]="%s";' % (stp, base64.b64encode((OUT / f'{stp}.glb').read_bytes()).decode()))
-    print(stp, 'GLB %.1f Mo, USDZ %.1f Mo' % ((OUT / f'{stp}.glb').stat().st_size / 1e6, (OUT / f'{stp}.usdz').stat().st_size / 1e6))
+export_glb(OUT.resolve() / 'visite.glb')
+export_usdz(OUT.resolve() / 'visite.usdz')        # textures des panneaux : chemins relatifs au dossier des modèles
+(OUT / 'visite.glb.js').write_text('(window.__GLB=window.__GLB||{})["visite"]="%s";' % base64.b64encode((OUT / 'visite.glb').read_bytes()).decode())
+print('visite GLB %.1f Mo, USDZ %.1f Mo' % ((OUT / 'visite.glb').stat().st_size / 1e6, (OUT / 'visite.usdz').stat().st_size / 1e6))
 
 # ---------------------------------------------------------------- repères pour les légendes et la caméra
 def mv(p):
@@ -424,7 +495,9 @@ meta = {
     'scale_m_per_angstrom': SCALE,
     'site_target_m': mv(site_c),
     'site_orbit_deg': orbit(open_dir),
-    'anim': {'name': 'fixation-hydrolyse', 'bound': 5.0, 'cut_end': 9.4, 'end': ANIM_T[-1]},
+    'anim': {'name': 'visite', 'end': END, 'segments': {str(k): list(v) for k, v in SEG.items()},
+             'bound': T_BOUND, 'cut': [T_CUT0, T_CUT1], 'gone': T_GONE},
+    'captions': {str(k): list(v) for k, v in CAPTIONS.items()},
     'hotspots': {
         'proteine': mv(top + np.array([0, 2, 0])),
         'debut': mv(ca[0]), 'fin': mv(ca[-1]),
@@ -442,7 +515,7 @@ meta = {
         'ecart_cycles_moins2_moins3_A': [round(check['minus2'], 2), round(check['minus3'], 2)],
         'substrat_distance_min_proteine_A': round(float(dsub.min()), 2),
         'C1_moins1__O4_plus1_A': round(bond_len, 2),
-        'cellulose_montee_A': round(float(best[1][5]), 2),
+        'cellulose_montee_A': round(abs(float(best[1][5])), 2),
     },
     'atoms': {'amylase': int(len(prot)), 'acides_amines': int(len(ca))},
 }
