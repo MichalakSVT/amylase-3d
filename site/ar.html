@@ -5,30 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Amylase en réalité augmentée</title>
 <style>
-:root { --bg: #f7f6fb; --ink: #1f1b2b; --muted: #5d5770; --line: #dcd7e8; --violet: #6a3db8; --violet-dark: #5a339e;
+:root { --bg: #f7f6fb; --ink: #1f1b2b; --muted: #5d5770; --line: #dcd7e8; --violet: #6a3db8; --violet-dark: #5a339e; --violet-soft: #efe9fa;
   --font: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.4;
-  display: flex; flex-direction: column; padding: env(safe-area-inset-top, 0px) max(14px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(14px, env(safe-area-inset-left, 0px)); }
-h1 { font-size: 1.3rem; margin: 12px 0 2px; }
-.sub { margin: 0 0 10px; color: var(--muted); font-size: .9rem; }
-.stage { position: relative; flex: 1; min-height: 320px; background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; background: #fbfaff; --poster-color: transparent; }
-#ar-button { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--violet); color: #fff; border: 0;
-  border-radius: 999px; font: 700 1.1rem var(--font); padding: 15px 24px; white-space: nowrap; box-shadow: 0 4px 14px rgba(90,51,158,.35); cursor: pointer; }
-#ar-button:active { background: var(--violet-dark); }
-#ar-button:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
-.legend { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .9rem; pointer-events: none; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9); padding: 3px 8px; border-radius: 8px; }
-.legend i { width: 13px; height: 13px; border-radius: 50%; display: inline-block; }
-.loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); background: #fbfaff; }
-.msg { margin: 10px 0 4px; font-size: .95rem; }
-.msg.warn { color: #8a4b00; }
-.links { margin: 4px 0 14px; font-size: .95rem; }
-.links a { color: var(--violet-dark); }
-.note { font-size: .8rem; color: var(--muted); margin: 0 0 12px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.45;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px)); }
+main { max-width: 640px; margin: 0 auto; padding: 16px 0 24px; }
+h1 { font-size: 1.35rem; margin: 6px 0 4px; }
+.sub { margin: 0 0 16px; color: var(--muted); font-size: .95rem; }
+.choice { display: block; width: 100%; text-align: left; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px;
+  font: inherit; color: inherit; cursor: pointer; text-decoration: none; }
+.choice strong { display: block; font-size: 1.1rem; color: var(--violet-dark); margin-bottom: 4px; }
+.choice.main { border-color: var(--violet); background: var(--violet-soft); }
+.choice:disabled { opacity: .5; cursor: default; }
+.note { font-size: .88rem; color: var(--muted); }
+model-viewer { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+button:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
 </style>
 <script>
   function mvFallback() {
@@ -40,52 +33,52 @@ model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; backgrou
 <script src="lib/model-viewer-umd.min.js" onerror="mvFallback()"></script>
 </head>
 <body>
-<h1>L’amylase en réalité augmentée</h1>
-<p class="sub">Modèle moléculaire agrandi (environ 60 millions de fois) · PDB 3L2L</p>
+<main>
+  <h1>L’amylase en réalité augmentée</h1>
+  <p class="sub">Visite guidée en 5 étapes : structure, site actif, fixation du substrat, hydrolyse, cellulose.</p>
 
-<div class="stage">
-  <model-viewer id="viewer"
-    src="models/etape3-fixation.glb" ios-src="models/etape3-fixation.usdz" autoplay animation-name="fixation-hydrolyse"
-    alt="Amylase (violet) et portion d’amidon (orange) qui se fixe dans le site actif puis est coupée"
-    camera-controls touch-action="pan-y" camera-orbit="0deg 75deg auto"
-    shadow-intensity="0.6" exposure="0.95" environment-image="neutral"
-    ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto">
-    <button id="ar-button" slot="ar-button" type="button">Observer dans mon environnement</button>
+  <button type="button" class="choice" id="native" disabled>
+    <strong>Sur la table</strong>
+    <span id="native-text">Vérification de la compatibilité de l’appareil…</span>
+  </button>
+
+  <a class="choice" id="fiche" href="fiche.html">
+    <strong>Avec la fiche imprimée</strong>
+    Fonctionne sur tous les téléphones et tablettes (dont les Lenovo Tab K11) : la molécule apparaît sur la fiche, avec les textes, la pause et le choix de la vitesse.
+  </a>
+
+  <a class="choice" href="./">
+    <strong>Vue 3D sans réalité augmentée</strong>
+    Toutes les explications, légendes et la visite guidée à l’écran.
+  </a>
+
+  <p class="note">La caméra est utilisée seulement pendant la réalité augmentée. Aucune image n’est enregistrée ni envoyée.</p>
+
+  <model-viewer id="viewer" src="models/visite.glb" ios-src="models/visite.usdz" animation-name="visite" autoplay
+    ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto" alt="">
+    <span slot="ar-button" hidden></span>
   </model-viewer>
-  <div class="legend">
-    <span><i style="background:#6a3db8"></i>Amylase</span>
-    <span><i style="background:#1bc689"></i>Site actif</span>
-    <span><i style="background:#f4a600"></i>Substrat : portion d’amidon</span>
-  </div>
-  <div class="loading" id="loading">Chargement du modèle…</div>
-</div>
-
-<p class="msg" id="msg">Chargement…</p>
-<p class="links"><a href="./">Ouvrir la vue 3D complète (site actif, informations)</a></p>
-<p class="note">La caméra est utilisée par l’application de réalité augmentée de l’appareil. Aucune image n’est enregistrée ni envoyée.</p>
-
+</main>
 <script>
 (function () {
-  var mv = document.getElementById('viewer'), msg = document.getElementById('msg');
+  var mv = document.getElementById('viewer'), btn = document.getElementById('native'), txt = document.getElementById('native-text');
   var ua = navigator.userAgent;
   var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  var isAndroid = /Android/.test(ua);
   function update() {
     if (mv.canActivateAR) {
-      msg.className = 'msg';
-      msg.textContent = 'Touchez « Observer dans mon environnement », autorisez la caméra, puis visez une table et bougez doucement le téléphone.';
+      btn.disabled = false; btn.classList.add('main');
+      txt.textContent = isIOS
+        ? 'La molécule se pose sur la table ; la visite défile seule, avec ses textes (pas de pause sur iPhone et iPad).'
+        : 'Ouvre la visite : touchez ensuite « Observer dans mon environnement ». Textes, pause et vitesse restent à l’écran.';
     } else {
-      msg.className = 'msg warn';
-      msg.textContent = isIOS ? 'Réalité augmentée indisponible ici : ouvrez ce lien dans Safari.'
-        : isAndroid ? 'Réalité augmentée indisponible ici : ouvrez ce lien dans Chrome et vérifiez que « Services Google Play pour la RA » est installé.'
-        : 'La réalité augmentée fonctionne sur téléphone ou tablette (Android avec Chrome, iPhone ou iPad avec Safari).';
+      btn.disabled = true;
+      document.getElementById('fiche').classList.add('main');
+      txt.textContent = 'Non disponible sur cet appareil ou dans ce navigateur : utilisez la fiche imprimée.';
     }
   }
-  mv.addEventListener('load', function () { document.getElementById('loading').hidden = true; update(); });
-  mv.addEventListener('error', function () { document.getElementById('loading').textContent = 'Le modèle n’a pas pu être chargé. Vérifiez la connexion, puis rechargez la page.'; });
-  mv.addEventListener('ar-status', function (e) {
-    if (e.detail.status === 'failed') { msg.className = 'msg warn'; msg.textContent = 'La réalité augmentée n’a pas pu démarrer (caméra refusée ou appareil non compatible).'; }
-  });
+  mv.addEventListener('load', update);
+  setTimeout(function () { if (btn.disabled && !mv.loaded) update(); }, 8000);
+  btn.addEventListener('click', function () { if (isIOS) mv.activateAR(); else location.href = './#etape1'; });
 })();
 </script>
 </body>
