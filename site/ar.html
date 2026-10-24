@@ -45,8 +45,8 @@ model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; backgrou
 
 <div class="stage">
   <model-viewer id="viewer"
-    src="models/amylase-glucides.glb" ios-src="models/amylase-glucides.usdz"
-    alt="Amylase (violet) et fragments glucidiques associés (orange)"
+    src="models/etape3-fixation.glb" ios-src="models/etape3-fixation.usdz" autoplay animation-name="fixation-hydrolyse"
+    alt="Amylase (violet) et portion d’amidon (orange) qui se fixe dans le site actif puis est coupée"
     camera-controls touch-action="pan-y" camera-orbit="0deg 75deg auto"
     shadow-intensity="0.6" exposure="0.95" environment-image="neutral"
     ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto">
@@ -54,7 +54,8 @@ model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; backgrou
   </model-viewer>
   <div class="legend">
     <span><i style="background:#6a3db8"></i>Amylase</span>
-    <span><i style="background:#f4a600"></i>Fragments glucidiques associés à l’amylase</span>
+    <span><i style="background:#1bc689"></i>Site actif</span>
+    <span><i style="background:#f4a600"></i>Substrat : portion d’amidon</span>
   </div>
   <div class="loading" id="loading">Chargement du modèle…</div>
 </div>
