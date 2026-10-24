@@ -111,6 +111,9 @@ mesh = max(mesh.split(only_watertight=False), key=lambda x: len(x.faces))
 trimesh.smoothing.filter_taubin(mesh, iterations=10)
 v, f = fast_simplification.simplify(mesh.vertices, mesh.faces, target_reduction=0.75)
 mesh = trimesh.Trimesh(v, f, process=True)
+# marching cubes sur un champ croissant vers l'intérieur : faces orientées vers l'intérieur -> on les retourne
+if mesh.volume < 0:
+    mesh.invert()
 _, idx = tree.query(mesh.triangles_center)
 site_face = prot_res[idx] > 0
 print('surface : %d triangles, site actif : %d' % (len(mesh.faces), site_face.sum()))
@@ -226,7 +229,7 @@ def tube(path, radius=0.9, sides=8):
         for j in range(sides):
             a, b = i * sides + j, i * sides + (j + 1) % sides
             c, d = a + sides, b + sides
-            F += [[a, c, b], [b, c, d]]
+            F += [[a, b, c], [b, d, c]]          # faces orientées vers l'extérieur du tube
     return trimesh.Trimesh(V, F, process=False)
 NSEG = 8
 spl = catmull(ca, 4)
