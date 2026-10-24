@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Amylase – réalité augmentée avec la fiche</title>
+<meta name="theme-color" content="#1f1b2b">
+<style>
+:root { --ink: #1f1b2b; --muted: #5d5770; --line: #dcd7e8; --violet: #6a3db8; --violet-dark: #5a339e; --violet-soft: #efe9fa;
+  --font: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: #1f1b2b; color: var(--ink); font-family: var(--font); overflow: hidden; }
+#ar { position: fixed; inset: 0; }
+#ar video { object-fit: cover; }
+.top { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 8px max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px)); }
+.chip { background: rgba(255,255,255,.94); border-radius: 10px; padding: 6px 10px; font-size: .9rem; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+.chip a { color: var(--violet-dark); font-weight: 700; text-decoration: none; }
+.status { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; max-width: min(90vw, 460px); text-align: center;
+  background: rgba(255,255,255,.95); border-radius: 14px; padding: 14px 18px; font-size: 1.05rem; box-shadow: 0 2px 14px rgba(0,0,0,.25); }
+.status strong { color: var(--violet-dark); }
+.status button { margin-top: 12px; min-height: 48px; padding: 0 22px; border-radius: 999px; border: 0; background: var(--violet); color: #fff; font: 700 1.05rem var(--font); cursor: pointer; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .82rem; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.player { position: fixed; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px));
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 5; margin: 0 auto; max-width: 760px;
+  background: rgba(255,255,255,.96); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 14px rgba(0,0,0,.25); }
+.cap { margin: 0; font-size: 1rem; line-height: 1.3; }
+.cap strong { color: var(--violet-dark); }
+.pctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pctl button { width: 48px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: 700 1.05rem var(--font); cursor: pointer; }
+.pctl button.pp { width: 60px; background: var(--violet); color: #fff; border-color: var(--violet); }
+.speed { margin-left: auto; font-size: .88rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.speed select { font: 600 .95rem var(--font); height: 40px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 0 6px; }
+button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./lib/three/build/three.module.js",
+  "three/addons/": "./lib/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="ar"></div>
+
+<div class="top">
+  <span class="chip"><strong>L’amylase en 3D</strong> · réalité augmentée avec la fiche</span>
+  <span class="chip"><a href="./">Vue 3D complète</a></span>
+</div>
+
+<div class="status" id="status">
+  <div id="status-text">Posez la fiche imprimée à plat, bien éclairée. La caméra de l’appareil va s’ouvrir : filmez toute la fiche.</div>
+  <button type="button" id="start">Démarrer la caméra</button>
+</div>
+
+<div class="player" id="player" hidden>
+  <div class="legend" id="legend"></div>
+  <p class="cap"><strong id="cap-title"></strong> <span id="cap-text"></span></p>
+  <div class="pctl">
+    <button type="button" id="p-prev" aria-label="Étape précédente" title="Étape précédente">⏮</button>
+    <button type="button" id="pp" class="pp" aria-label="Mettre en pause" title="Pause">❚❚</button>
+    <button type="button" id="p-next" aria-label="Étape suivante" title="Étape suivante">⏭</button>
+    <label class="speed">Vitesse
+      <select id="speed">
+        <option value="0.5">× 0,5</option>
+        <option value="0.75">× 0,75</option>
+        <option value="1" selected>× 1</option>
+        <option value="1.5">× 1,5</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MindARThree } from './lib/mindar/mindar-image-three.prod.js';
+
+const $ = (id) => document.getElementById(id);
+const LEGENDS = {
+  1: [['linear-gradient(90deg,#2bb3d9,#4b1f8f)', 'Chaîne d’acides aminés'], ['#6a3db8', 'Surface de la protéine']],
+  2: [['#6a3db8', 'Amylase'], ['#1bc689', 'Site actif']],
+  3: [['#6a3db8', 'Amylase'], ['#1bc689', 'Site actif'], ['#f4a600', 'Substrat : amidon']],
+  4: [['#6a3db8', 'Amylase'], ['#1bc689', 'Site actif'], ['#e31c2e', 'Liaison coupée'], ['#f4a600', 'Produits']],
+  5: [['#6a3db8', 'Amylase'], ['#f4a600', 'Amidon (α-1,4)'], ['#2f6db5', 'Cellulose (β-1,4)']],
+};
+let META, mixer, action, current = -1;
+
+function status(html, withButton) {
+  $('status').hidden = !html;
+  if (html) $('status-text').innerHTML = html;
+  $('start').hidden = !withButton;
+}
+function seg(i) { return META.anim.segments[String(i + 1)]; }
+function stepAt(t) { for (let i = 0; i < 5; i++) { const s = seg(i); if (t >= s[0] && t < s[1]) return i; } return 4; }
+function showStep(i) {
+  current = i;
+  const c = META.captions[String(i + 1)];
+  $('cap-title').textContent = c[0]; $('cap-text').textContent = c[1];
+  const lg = $('legend'); lg.textContent = '';
+  for (const [col, txt] of LEGENDS[i + 1]) {
+    const s = document.createElement('span'), dot = document.createElement('i');
+    dot.style.background = col; s.append(dot, txt); lg.append(s);
+  }
+}
+function goTo(i) { i = (i + 5) % 5; action.time = seg(i)[0] + 0.05; mixer.update(0); showStep(i); }
+function setPlaying(p) {
+  action.paused = !p;
+  $('pp').textContent = p ? '❚❚' : '▶';
+  $('pp').title = p ? 'Pause' : 'Reprendre';
+  $('pp').setAttribute('aria-label', p ? 'Mettre en pause' : 'Reprendre la visite');
+}
+
+async function start() {
+  status('Chargement du modèle et de la caméra…', false);
+  try {
+    META = await (await fetch('models/meta.json')).json();
+    const mindar = new MindARThree({
+      container: $('ar'), imageTargetSrc: 'models/fiche.mind',
+      uiLoading: 'no', uiScanning: 'no', uiError: 'no', filterMinCF: 0.0001, filterBeta: 0.001,
+    });
+    const { renderer, scene, camera } = mindar;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(0.3, -0.5, 1); scene.add(sun);
+    const gltf = await new GLTFLoader().loadAsync('models/visite.glb');
+    const model = gltf.scene;
+    // Les panneaux de texte intégrés au modèle sont remplacés ici par le lecteur à l'écran
+    model.traverse((o) => { if (o.isMesh && /^panneau/.test(o.material.name)) o.visible = false; });
+    // La fiche est le plan XY de l'ancre (largeur 1) : le modèle (axe y vers le haut) est redressé
+    // pour se tenir debout sur le dessin de la molécule.
+    const holder = new THREE.Group();
+    holder.add(model);
+    model.rotation.x = Math.PI / 2;
+    holder.position.set(-0.2, -0.05, 0);
+    holder.scale.setScalar(1.0);
+    const anchor = mindar.addAnchor(0);
+    anchor.group.add(holder);
+    mixer = new THREE.AnimationMixer(model);
+    action = mixer.clipAction(gltf.animations[0]); action.play();
+    mixer.timeScale = +$('speed').value;
+    anchor.onTargetFound = () => status('', false);
+    anchor.onTargetLost = () => status('Fiche perdue de vue : <strong>filmez toute la fiche</strong>, posée à plat et bien éclairée.', false);
+    await mindar.start();
+    status('<strong>Filmez toute la fiche</strong>, posée à plat et bien éclairée.', false);
+    $('player').hidden = false;
+    const m = /^#etape([1-5])$/.exec(location.hash);
+    goTo(m ? +m[1] - 1 : 0); setPlaying(true);
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      mixer.update(clock.getDelta());
+      const i = stepAt(action.time);
+      if (i !== current) showStep(i);
+      renderer.render(scene, camera);
+    });
+    window.addEventListener('pagehide', () => mindar.stop());
+    window.__fiche = { mixer, action, anchor };
+  } catch (e) {
+    console.error(e);
+    const refused = e && (e.name === 'NotAllowedError' || /Permission|denied/i.test(String(e.message)));
+    status(refused
+      ? 'La caméra a été refusée. Autorisez l’accès à la caméra pour ce site dans les réglages du navigateur, puis rechargez la page.'
+      : 'La réalité augmentée n’a pas pu démarrer sur cet appareil (caméra indisponible ou navigateur trop ancien). Utilisez la <a href="./">vue 3D</a>.', false);
+  }
+}
+
+$('start').addEventListener('click', start);
+$('pp').addEventListener('click', () => setPlaying(action.paused));
+$('p-prev').addEventListener('click', () => goTo(current - 1));
+$('p-next').addEventListener('click', () => goTo(current + 1));
+$('speed').addEventListener('change', (e) => { if (mixer) mixer.timeScale = +e.target.value; });
+</script>
+</body>
+</html>
