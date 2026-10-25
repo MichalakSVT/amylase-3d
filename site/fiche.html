@@ -34,6 +34,12 @@ html, body { margin: 0; height: 100%; background: #1f1b2b; color: var(--ink); fo
 .pctl button.pp { width: 60px; background: var(--violet); color: #fff; border-color: var(--violet); }
 .speed { margin-left: auto; font-size: .88rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .speed select { font: 600 .95rem var(--font); height: 40px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 0 6px; }
+.tools { position: fixed; right: max(8px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-60%); z-index: 5; display: flex; flex-direction: column; gap: 8px; }
+.tools button { width: 52px; height: 52px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.94); color: var(--ink); font: 700 1.5rem var(--font); cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+.tools .zoomval { text-align: center; font-size: .85rem; font-weight: 700; background: rgba(255,255,255,.94); border-radius: 8px; padding: 2px 0; }
+#touch { position: fixed; inset: 0; z-index: 4; touch-action: none; }
+.hint { position: fixed; left: 50%; top: calc(56px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 5; max-width: 92vw; text-align: center;
+  background: rgba(31,27,43,.85); color: #fff; border-radius: 10px; padding: 6px 12px; font-size: .92rem; pointer-events: none; }
 button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
 </style>
 <script type="importmap">
@@ -45,6 +51,15 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid
 </head>
 <body>
 <div id="ar"></div>
+
+<div id="touch" hidden></div>
+<div class="tools" id="tools" hidden>
+  <button type="button" id="z-in" aria-label="Agrandir" title="Agrandir">+</button>
+  <div class="zoomval" id="zoomval" aria-live="polite">× 1</div>
+  <button type="button" id="z-out" aria-label="Réduire" title="Réduire">−</button>
+  <button type="button" id="z-reset" aria-label="Taille et orientation de départ" title="Taille et orientation de départ">⟲</button>
+</div>
+<div class="hint" id="hint" hidden>Glissez un doigt pour tourner la molécule · pincez pour l’agrandir</div>
 
 <div class="top">
   <span class="chip"><strong>L’amylase en 3D</strong> · réalité augmentée avec la fiche</span>
@@ -87,7 +102,56 @@ const LEGENDS = {
   4: [['#6a3db8', 'Amylase'], ['#1bc689', 'Site actif'], ['#e31c2e', 'Liaison coupée'], ['#f4a600', 'Produits']],
   5: [['#6a3db8', 'Amylase'], ['#f4a600', 'Amidon (α-1,4)'], ['#2f6db5', 'Cellulose (β-1,4)']],
 };
-let META, mixer, action, current = -1;
+let META, mixer, action, current = -1, view = null;
+
+// ------------------------------------------------------------ taille et orientation choisies par l'élève
+const S0 = 1.5, SMIN = S0 * 0.3, SMAX = S0 * 8;   // taille de départ (1 = première version) ; zoom de × 0,3 à × 8
+let scale = S0;
+function applyScale() {
+  view.spin.scale.setScalar(scale);
+  view.base.position.set(-0.2, -0.05, view.halfH * S0);    // le zoom se fait autour du centre de la protéine, qui reste fixe au-dessus du dessin
+  $('zoomval').textContent = '× ' + String(Math.round(scale / S0 * 10) / 10).replace('.', ',');
+}
+function setScale(s) { scale = Math.min(SMAX, Math.max(SMIN, s)); applyScale(); }
+function resetView() { view.spin.quaternion.identity(); scale = S0; applyScale(); }
+const _q = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _ax = new THREE.Vector3();
+// rotation autour d'un axe exprimé dans le repère de la caméra (rotation « boule » qui suit le doigt)
+function rotateCam(axis, angle) {
+  if (!angle) return;
+  _ax.copy(axis).applyQuaternion(view.camera.getWorldQuaternion(_q));
+  _ax.applyQuaternion(view.base.getWorldQuaternion(_qp).invert()).normalize();
+  view.spin.quaternion.premultiply(_q.setFromAxisAngle(_ax, angle));
+}
+function hideHint() { $('hint').hidden = true; }
+function setupGestures() {
+  const el = $('touch'), pts = new Map();
+  let lastDist = 0, lastAng = 0;
+  const two = () => { const [a, b] = [...pts.values()]; return { d: Math.hypot(b.x - a.x, b.y - a.y), a: Math.atan2(b.y - a.y, b.x - a.x) }; };
+  el.addEventListener('pointerdown', (e) => {
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const t = two(); lastDist = t.d; lastAng = t.a; }
+  });
+  el.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      const k = 1.5 * Math.PI / Math.min(innerWidth, innerHeight);   // 3/4 de tour pour la largeur de l'écran
+      const len = Math.hypot(dx, dy);
+      if (len) { rotateCam(new THREE.Vector3(dy / len, dx / len, 0), len * k); hideHint(); }
+    } else if (pts.size === 2) {
+      const t = two();
+      if (lastDist > 0) setScale(scale * t.d / lastDist);
+      let da = t.a - lastAng; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+      rotateCam(new THREE.Vector3(0, 0, 1), -da);                       // rotation à deux doigts dans le plan de l'écran
+      lastDist = t.d; lastAng = t.a; hideHint();
+    }
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size === 2) { const t = two(); lastDist = t.d; lastAng = t.a; } };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  el.addEventListener('wheel', (e) => { e.preventDefault(); setScale(scale * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+}
 
 function status(html, withButton) {
   $('status').hidden = !html;
@@ -129,23 +193,30 @@ async function start() {
     const model = gltf.scene;
     // Les panneaux de texte intégrés au modèle sont remplacés ici par le lecteur à l'écran
     model.traverse((o) => { if (o.isMesh && /^panneau/.test(o.material.name)) o.visible = false; });
-    // La fiche est le plan XY de l'ancre (largeur 1) : le modèle (axe y vers le haut) est redressé
-    // pour se tenir debout sur le dessin de la molécule.
-    const holder = new THREE.Group();
-    holder.add(model);
-    model.rotation.x = Math.PI / 2;
-    holder.position.set(-0.2, -0.05, 0);
-    holder.scale.setScalar(1.0);
+    // La fiche est le plan XY de l'ancre (largeur 1). Emboîtement :
+    // base (position sur le dessin) > spin (orientation et taille choisies par l'élève) > model (centré sur la protéine).
+    model.rotation.x = Math.PI / 2;          // modèle debout sur la fiche (axe y du modèle -> axe z de l'ancre)
+    const box = new THREE.Box3();
+    model.traverse((o) => { if (o.isMesh && o.material.name === 'surface_transparente') { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox); } });
+    const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    model.position.copy(center.clone().applyEuler(model.rotation)).negate();   // rotations et zoom autour du centre de la protéine
+    const halfH = size.y / 2;
+    const spin = new THREE.Group(); spin.add(model);
+    const base = new THREE.Group(); base.add(spin);
+    const holder = base;
+    view = { base, spin, halfH, camera };
+    resetView();
     const anchor = mindar.addAnchor(0);
     anchor.group.add(holder);
     mixer = new THREE.AnimationMixer(model);
     action = mixer.clipAction(gltf.animations[0]); action.play();
     mixer.timeScale = +$('speed').value;
-    anchor.onTargetFound = () => status('', false);
+    let hintShown = false;   // aide aux gestes, affichée une fois à la première détection de la fiche
+    anchor.onTargetFound = () => { status('', false); if (!hintShown) { hintShown = true; $('hint').hidden = false; setTimeout(hideHint, 8000); } };
     anchor.onTargetLost = () => status('Fiche perdue de vue : <strong>filmez toute la fiche</strong>, posée à plat et bien éclairée.', false);
     await mindar.start();
     status('<strong>Filmez toute la fiche</strong>, posée à plat et bien éclairée.', false);
-    $('player').hidden = false;
+    $('player').hidden = false; $('tools').hidden = false; $('touch').hidden = false; setupGestures();
     const m = /^#etape([1-5])$/.exec(location.hash);
     goTo(m ? +m[1] - 1 : 0); setPlaying(true);
     const clock = new THREE.Clock();
@@ -156,7 +227,7 @@ async function start() {
       renderer.render(scene, camera);
     });
     window.addEventListener('pagehide', () => mindar.stop());
-    window.__fiche = { mixer, action, anchor };
+    window.__fiche = { mixer, action, anchor, view, setScale, rotateCam, get scale() { return scale; } };
   } catch (e) {
     console.error(e);
     const refused = e && (e.name === 'NotAllowedError' || /Permission|denied/i.test(String(e.message)));
@@ -167,6 +238,9 @@ async function start() {
 }
 
 $('start').addEventListener('click', start);
+$('z-in').addEventListener('click', () => setScale(scale * 1.4));
+$('z-out').addEventListener('click', () => setScale(scale / 1.4));
+$('z-reset').addEventListener('click', resetView);
 $('pp').addEventListener('click', () => setPlaying(action.paused));
 $('p-prev').addEventListener('click', () => goTo(current - 1));
 $('p-next').addEventListener('click', () => goTo(current + 1));
