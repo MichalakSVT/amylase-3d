@@ -40,6 +40,15 @@ html, body { margin: 0; height: 100%; background: #1f1b2b; color: var(--ink); fo
 #touch { position: fixed; inset: 0; z-index: 4; touch-action: none; }
 .hint { position: fixed; left: 50%; top: calc(56px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 5; max-width: 92vw; text-align: center;
   background: rgba(31,27,43,.85); color: #fff; border-radius: 10px; padding: 6px 12px; font-size: .92rem; pointer-events: none; }
+#labels { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.lab3 { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .25s; }
+.lab3::before { content: ""; position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+.lab3 span { position: absolute; left: 12px; top: 0; transform: translateY(-50%); white-space: nowrap;
+  background: rgba(255,255,255,.95); border: 2px solid var(--c); color: var(--ink); border-radius: 8px; padding: 3px 9px;
+  font: 700 .95rem var(--font); box-shadow: 0 1px 5px rgba(0,0,0,.25); }
+.lab3.left span { left: auto; right: 12px; }
+.lab3.hidden-behind { opacity: .45; }
 button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
 </style>
 <script type="importmap">
@@ -53,6 +62,7 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid
 <div id="ar"></div>
 
 <div id="touch" hidden></div>
+<div id="labels" aria-live="polite"></div>
 <div class="tools" id="tools" hidden>
   <button type="button" id="z-in" aria-label="Agrandir" title="Agrandir">+</button>
   <div class="zoomval" id="zoomval" aria-live="polite">× 1</div>
@@ -103,6 +113,79 @@ const LEGENDS = {
   5: [['#6a3db8', 'Amylase'], ['#f4a600', 'Amidon (α-1,4)'], ['#2f6db5', 'Cellulose (β-1,4)']],
 };
 let META, mixer, action, current = -1, view = null;
+
+// ------------------------------------------------------------ légendes attachées à la molécule (mêmes repères que la vue 3D)
+// [repère, texte, couleur, côté, moment] ; moment : 'always', 'end' (après l'animation de l'étape) ou 'cut' (pendant la coupure)
+const C = { violet: '#6a3db8', site: '#1bc689', sugar: '#f4a600', cel: '#2f6db5', cut: '#e31c2e', chain: '#2bb3d9', chainEnd: '#4b1f8f' };
+const LABELS = [
+  [['proteine', 'Amylase : 1 chaîne de 496 acides aminés', C.violet], ['debut', 'Acide aminé n° 1', C.chain], ['fin', 'Acide aminé n° 496', C.chainEnd, 'left']],
+  [['site', 'Site actif', C.site], ['asp197', 'Asp 197', C.site], ['glu233', 'Glu 233', C.site], ['asp300', 'Asp 300', C.site, 'left']],
+  [['site', 'Site actif', C.site, 'left'], ['node:pieceA_0', 'Substrat : portion d’amidon', C.sugar, null, 'start'], ['substrat', 'Complexe enzyme-substrat', C.sugar, null, 'end']],
+  [['site', 'Site actif', C.site, 'left', 'none'], ['liaison', 'Liaison α-1,4 coupée (hydrolyse)', C.cut, null, 'cut'],
+   ['produitB', 'Maltose (2 glucoses)', C.sugar, null, 'end'], ['produitA', 'Chaîne d’amidon raccourcie', C.sugar, 'left', 'end'], ['site', 'Enzyme intacte', C.site, null, 'end']],
+  [['proteine', 'Amylase', C.violet], ['amidon', 'Amidon : glucoses liés en α-1,4', C.sugar], ['cellulose', 'Cellulose : glucoses liés en β-1,4', C.cel, 'left']],
+];
+function phaseAt(i, t) {
+  const a = META.anim;
+  if (i === 2) return t >= a.bound ? 'end' : 'start';
+  if (i === 3) return (t >= a.cut[0] && t < a.cut[1]) ? 'cut' : (t >= a.gone ? 'end' : 'none');
+  return 'end';
+}
+let labelEls = [], labelKey = '', occludeT = 0;
+// acides aminés du site actif : la légende est posée sur la surface verte la plus proche de l'atome (l'atome lui-même est sous la surface)
+const SNAP = new Set(['asp197', 'glu233', 'asp300']);
+let sitePos = null, siteNrm = null;
+function snapToSite(p) {
+  if (!sitePos) return p;
+  let best = -1, bd = Infinity;
+  for (let k = 0; k < sitePos.count; k++) {
+    const d = (sitePos.getX(k) - p[0]) ** 2 + (sitePos.getY(k) - p[1]) ** 2 + (sitePos.getZ(k) - p[2]) ** 2;
+    if (d < bd) { bd = d; best = k; }
+  }
+  const o = 0.006;   // 1 Å au-dessus de la surface
+  return [sitePos.getX(best) + siteNrm.getX(best) * o, sitePos.getY(best) + siteNrm.getY(best) * o, sitePos.getZ(best) + siteNrm.getZ(best) * o];
+}
+const _v = new THREE.Vector3(), _cam = new THREE.Vector3(), _dir = new THREE.Vector3(), ray = new THREE.Raycaster();
+function buildLabels(i, ph) {
+  const box = $('labels'); box.textContent = ''; labelEls = [];
+  for (const [key, txt, col, side, when] of LABELS[i]) {
+    if ((when || 'always') !== 'always' && when !== ph) continue;
+    let obj = null, pos = null;
+    if (key.startsWith('node:')) { obj = view.model.getObjectByName(key.slice(5)); if (!obj) continue; }
+    else { pos = META.hotspots[key]; if (!pos) continue; if (SNAP.has(key)) pos = snapToSite(pos); }
+    const d = document.createElement('div'); d.className = 'lab3' + (side === 'left' ? ' left' : '');
+    d.style.setProperty('--c', col);
+    const sp = document.createElement('span'); sp.textContent = txt; d.append(sp); box.append(d);
+    labelEls.push({ el: d, obj, p: pos ? new THREE.Vector3(...pos) : null });
+  }
+}
+// à chaque image : position à l'écran de chaque repère ; légende atténuée si le repère est caché par la protéine
+function updateLabels(model, camera, renderer, visible, occluders) {
+  const i = current, ph = phaseAt(i, action.time), key = i + ph;
+  if (key !== labelKey) { labelKey = key; buildLabels(i, ph); }
+  const r = renderer.domElement.getBoundingClientRect();
+  const now = performance.now(), doOcc = now - occludeT > 250;
+  if (doOcc) { occludeT = now; camera.getWorldPosition(_cam); }
+  for (const L of labelEls) {
+    if (L.obj) L.obj.getWorldPosition(_v); else model.localToWorld(_v.copy(L.p));
+    const w = _v.clone();
+    _v.project(camera);
+    const ok = visible && _v.z < 1 && _v.z > -1;
+    L.el.style.display = ok ? '' : 'none';
+    if (!ok) continue;
+    // la légende reste dans l'écran (sous le bandeau du haut) même si son repère en sort
+    const x = Math.min(innerWidth - 16, Math.max(16, r.left + (_v.x + 1) / 2 * r.width));
+    const y = Math.min(innerHeight - 16, Math.max(64, r.top + (1 - _v.y) / 2 * r.height));
+    L.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+    if (doOcc) {
+      // marge de 12 Å : un repère au fond du sillon reste lisible ; seuls les repères situés de l’autre côté de la protéine sont atténués
+      const margin = model.localToWorld(new THREE.Vector3(0.072, 0, 0)).distanceTo(model.localToWorld(new THREE.Vector3(0, 0, 0)));
+      const dist = _cam.distanceTo(w);
+      ray.set(_cam, _dir.copy(w).sub(_cam).normalize()); ray.far = Math.max(0, dist - margin);
+      L.el.classList.toggle('hidden-behind', ray.intersectObjects(occluders, false).length > 0);
+    }
+  }
+}
 
 // ------------------------------------------------------------ taille et orientation choisies par l'élève
 const S0 = 1.5, SMIN = S0 * 0.3, SMAX = S0 * 8;   // taille de départ (1 = première version) ; zoom de × 0,3 à × 8
@@ -204,7 +287,7 @@ async function start() {
     const spin = new THREE.Group(); spin.add(model);
     const base = new THREE.Group(); base.add(spin);
     const holder = base;
-    view = { base, spin, halfH, camera };
+    view = { base, spin, halfH, camera, model };
     resetView();
     const anchor = mindar.addAnchor(0);
     anchor.group.add(holder);
@@ -219,12 +302,17 @@ async function start() {
     $('player').hidden = false; $('tools').hidden = false; $('touch').hidden = false; setupGestures();
     const m = /^#etape([1-5])$/.exec(location.hash);
     goTo(m ? +m[1] - 1 : 0); setPlaying(true);
+    // surfaces opaques de la protéine qui peuvent cacher une légende
+    const occluders = [];
+    model.traverse((o) => { if (o.isMesh && (o.material.name === 'amylase' || o.material.name === 'site_actif')) occluders.push(o); });
+    model.traverse((o) => { if (o.isMesh && o.material.name === 'site_actif') { sitePos = o.geometry.attributes.position; if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals(); siteNrm = o.geometry.attributes.normal; } });
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {
       mixer.update(clock.getDelta());
       const i = stepAt(action.time);
       if (i !== current) showStep(i);
       renderer.render(scene, camera);
+      updateLabels(model, camera, renderer, anchor.group.visible, occluders.filter((o) => o.parent && o.parent.scale.x > 0.5 && o.scale.x > 0.5));
     });
     window.addEventListener('pagehide', () => mindar.stop());
     window.__fiche = { mixer, action, anchor, view, setScale, rotateCam, get scale() { return scale; } };
